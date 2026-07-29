@@ -162,3 +162,26 @@ ALTER TABLE ai_generated_advisories ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public or authenticated access to ai_generated_advisories" ON ai_generated_advisories
   FOR ALL USING (true);
 
+-- 9. Interactive AI Academic Advisor Chat Tables
+CREATE TABLE IF NOT EXISTS advisor_chats (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID,
+  title TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS advisor_messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  chat_id UUID REFERENCES advisor_chats(id) ON DELETE CASCADE,
+  sender TEXT NOT NULL CHECK (sender IN ('user', 'assistant')),
+  message_text TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE advisor_chats ENABLE ROW LEVEL SECURITY;
+ALTER TABLE advisor_messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public access to advisor_chats" ON advisor_chats FOR ALL USING (true);
+CREATE POLICY "Public access to advisor_messages" ON advisor_messages FOR ALL USING (true);
+
+

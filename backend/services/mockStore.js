@@ -349,6 +349,9 @@ export const mockStore = {
     }
   ],
 
-  ai_generated_advisories: []
+  ai_generated_advisories: [],
+  advisor_chats: [],
+  advisor_messages: []
 };
+
 

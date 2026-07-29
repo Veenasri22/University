@@ -12,6 +12,7 @@ import { Faculty } from './pages/Faculty.jsx';
 import { Curriculum } from './pages/Curriculum.jsx';
 import { Attendance } from './pages/Attendance.jsx';
 import { AIAdvisor } from './pages/AIAdvisor.jsx';
+import { AiAdvisorPage } from './pages/AiAdvisorPage.jsx';
 import { PolicyRAG } from './pages/PolicyRAG.jsx';
 import { Reports } from './pages/Reports.jsx';
 import { Profile } from './pages/Profile.jsx';
@@ -47,6 +48,7 @@ export default function App() {
       <Route path="/curriculum" element={<ProtectedRoute><Curriculum /></ProtectedRoute>} />
       <Route path="/attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
       <Route path="/ai-advisor" element={<ProtectedRoute><AIAdvisor /></ProtectedRoute>} />
+      <Route path="/ai-advisor-chat" element={<ProtectedRoute><AiAdvisorPage /></ProtectedRoute>} />
       <Route path="/policy-rag" element={<ProtectedRoute><PolicyRAG /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
@@ -55,3 +57,4 @@ export default function App() {
     </Routes>
   );
 }
+

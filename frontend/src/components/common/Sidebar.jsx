@@ -25,6 +25,7 @@ export const Sidebar = () => {
     { label: 'Curriculum & Syllabi', path: '/curriculum', icon: BookOpen },
     { label: 'Attendance Logs', path: '/attendance', icon: CalendarCheck },
     { label: 'AI Academic Advisor', path: '/ai-advisor', icon: Bot, badge: 'Multi-Agent' },
+    { label: 'AI Advisor Chat', path: '/ai-advisor-chat', icon: Sparkles, badge: 'Live Chat' },
     { label: 'Enterprise Policy RAG', path: '/policy-rag', icon: FileSearch, badge: 'AI Vector' },
     { label: 'Accreditation Reports', path: '/reports', icon: FileText },
     { label: 'Profile & Settings', path: '/profile', icon: UserCheck }

@@ -38,6 +38,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+import advisorRoutes from './routes/advisorRoutes.js';
 import { handleGenerateAdvisory } from './controllers/aiController.js';
 
 // API Routes
@@ -48,7 +49,9 @@ app.use('/api/faculty', facultyRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/advisor', advisorRoutes);
 app.use('/api/reports', reportRoutes);
+
 
 
 // Centralized Error Handling
