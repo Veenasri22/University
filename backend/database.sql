@@ -184,4 +184,26 @@ ALTER TABLE advisor_messages ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public access to advisor_chats" ON advisor_chats FOR ALL USING (true);
 CREATE POLICY "Public access to advisor_messages" ON advisor_messages FOR ALL USING (true);
 
+-- 10. Dynamic Google Gemini AI Assistant Tables
+CREATE TABLE IF NOT EXISTS ai_sessions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  title TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ai_chat_messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  session_id UUID REFERENCES ai_sessions(id) ON DELETE CASCADE,
+  sender TEXT NOT NULL CHECK (sender IN ('user', 'assistant')),
+  message_text TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE ai_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_chat_messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public access to ai_sessions" ON ai_sessions FOR ALL USING (true);
+CREATE POLICY "Public access to ai_chat_messages" ON ai_chat_messages FOR ALL USING (true);
+
+
 

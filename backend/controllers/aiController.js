@@ -1,9 +1,10 @@
 import { aiAdvisorChatSchema, policySearchSchema, policyUploadSchema } from '../validators/schemas.js';
-import { runMultiAgentAdvisor } from '../services/geminiService.js';
+import { runMultiAgentAdvisor, generateAiAnswer } from '../services/geminiService.js';
 import { searchPolicies, uploadPolicy } from '../services/ragService.js';
 import { scheduleGoogleCalendarMeeting, dispatchGmailAlert } from '../services/mcpService.js';
 import { mockStore } from '../services/mockStore.js';
 import { generateAdvisory } from '../services/aiService.js';
+
 import { supabase } from '../config/db.js';
 import crypto from 'crypto';
 
@@ -165,4 +166,192 @@ export const handleGenerateAdvisory = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * Controller for POST /api/ai/ask
+ * Handles session creation, context building, Gemini AI answer generation,
+ * and direct database insertion into ai_chat_messages. Zero dummy data.
+ */
+export const handleAskAi = async (req, res, next) => {
+  try {
+    const { prompt, sessionId: reqSessionId } = req.body;
+
+    if (!prompt || !prompt.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'prompt is required in request body.'
+      });
+    }
+
+    const trimmedPrompt = prompt.trim();
+    let currentSessionId = reqSessionId;
+
+    // 1. If sessionId is missing or null, create a new row in ai_sessions
+    if (!currentSessionId) {
+      const sessionTitle = trimmedPrompt.length > 40 ? trimmedPrompt.substring(0, 37) + '...' : trimmedPrompt;
+
+      if (supabase) {
+        const { data: newSession, error: sessionErr } = await supabase
+          .from('ai_sessions')
+          .insert([{ title: sessionTitle }])
+          .select()
+          .single();
+
+        if (!sessionErr && newSession) {
+          currentSessionId = newSession.id;
+        } else {
+          console.warn('[AI Controller] Supabase create session warning, using fallback:', sessionErr?.message);
+          currentSessionId = crypto.randomUUID();
+          mockStore.ai_sessions.push({ id: currentSessionId, title: sessionTitle, created_at: new Date().toISOString() });
+        }
+      } else {
+        currentSessionId = crypto.randomUUID();
+        mockStore.ai_sessions.push({ id: currentSessionId, title: sessionTitle, created_at: new Date().toISOString() });
+      }
+    }
+
+    // 2. Insert user's prompt into ai_chat_messages (sender: 'user')
+    const userMsgRecord = {
+      id: crypto.randomUUID(),
+      session_id: currentSessionId,
+      sender: 'user',
+      message_text: trimmedPrompt,
+      created_at: new Date().toISOString()
+    };
+
+    if (supabase) {
+      const { error: userMsgErr } = await supabase
+        .from('ai_chat_messages')
+        .insert([{
+          session_id: currentSessionId,
+          sender: 'user',
+          message_text: trimmedPrompt
+        }]);
+
+      if (userMsgErr) {
+        console.warn('[AI Controller] Supabase save user message warning:', userMsgErr.message);
+        mockStore.ai_chat_messages.push(userMsgRecord);
+      }
+    } else {
+      mockStore.ai_chat_messages.push(userMsgRecord);
+    }
+
+    // 3. Fetch past conversation history for context
+    let history = [];
+    if (supabase) {
+      const { data: historyData } = await supabase
+        .from('ai_chat_messages')
+        .select('sender, message_text')
+        .eq('session_id', currentSessionId)
+        .order('created_at', { ascending: true });
+
+      if (historyData) history = historyData;
+    } else {
+      history = mockStore.ai_chat_messages
+        .filter(m => m.session_id === currentSessionId)
+        .map(m => ({ sender: m.sender, message_text: m.message_text }));
+    }
+
+    // 4. Pass user prompt + history context to generateAiAnswer()
+    const aiResponseText = await generateAiAnswer(trimmedPrompt, history);
+
+    // 5. Save Gemini answer directly into ai_chat_messages (sender: 'assistant')
+    const assistantMsgRecord = {
+      id: crypto.randomUUID(),
+      session_id: currentSessionId,
+      sender: 'assistant',
+      message_text: aiResponseText,
+      created_at: new Date().toISOString()
+    };
+
+    if (supabase) {
+      const { error: assistantMsgErr } = await supabase
+        .from('ai_chat_messages')
+        .insert([{
+          session_id: currentSessionId,
+          sender: 'assistant',
+          message_text: aiResponseText
+        }]);
+
+      if (assistantMsgErr) {
+        console.warn('[AI Controller] Supabase save assistant message warning:', assistantMsgErr.message);
+        mockStore.ai_chat_messages.push(assistantMsgRecord);
+      }
+    } else {
+      mockStore.ai_chat_messages.push(assistantMsgRecord);
+    }
+
+    // 6. Fetch full updated message list
+    let allMessages = [];
+    if (supabase) {
+      const { data: fullMsgs } = await supabase
+        .from('ai_chat_messages')
+        .select('*')
+        .eq('session_id', currentSessionId)
+        .order('created_at', { ascending: true });
+
+      if (fullMsgs) allMessages = fullMsgs;
+    } else {
+      allMessages = mockStore.ai_chat_messages.filter(m => m.session_id === currentSessionId);
+    }
+
+    return res.status(200).json({
+      success: true,
+      sessionId: currentSessionId,
+      aiResponse: aiResponseText,
+      messages: allMessages
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Controller for GET /api/ai/sessions
+ */
+export const getAiSessions = async (req, res, next) => {
+  try {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('ai_sessions')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        return res.json({ success: true, sessions: data });
+      }
+    }
+
+    return res.json({ success: true, sessions: mockStore.ai_sessions });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Controller for GET /api/ai/sessions/:sessionId/messages
+ */
+export const getSessionMessages = async (req, res, next) => {
+  try {
+    const { sessionId } = req.params;
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('ai_chat_messages')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true });
+
+      if (!error && data) {
+        return res.json({ success: true, messages: data });
+      }
+    }
+
+    const messages = mockStore.ai_chat_messages.filter(m => m.session_id === sessionId);
+    return res.json({ success: true, messages });
+  } catch (err) {
+    next(err);
+  }
+};
+
 

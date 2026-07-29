@@ -351,7 +351,10 @@ export const mockStore = {
 
   ai_generated_advisories: [],
   advisor_chats: [],
-  advisor_messages: []
+  advisor_messages: [],
+  ai_sessions: [],
+  ai_chat_messages: []
 };
+
 
 

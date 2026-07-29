@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import api from '../services/api.js';
 import { AiAnalysisButton } from '../components/AiAnalysisButton.jsx';
+import { AiChatAssistant } from '../components/AiChatAssistant.jsx';
+
 import {
   Bot,
   Send,
@@ -123,6 +125,10 @@ export const AIAdvisor = () => {
 
       {/* Manual AI Assessment & Advisory Generator Component */}
       <AiAnalysisButton />
+
+      {/* Dynamic Google Gemini AI Assistant Component */}
+      <AiChatAssistant />
+
 
       {/* MCP Action Notification Box */}
       {mcpEvent && (
