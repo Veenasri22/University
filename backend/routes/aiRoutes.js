@@ -3,12 +3,15 @@ import {
   handleAdvisorChat,
   handlePolicySearch,
   handlePolicyUpload,
-  scheduleMeetingDirect
+  scheduleMeetingDirect,
+  handleGenerateAdvisory
 } from '../controllers/aiController.js';
 import { authenticateToken, authorizeRoles } from '../middleware/authMiddleware.js';
 import { aiLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
+
+router.post('/generate-advisory', handleGenerateAdvisory);
 
 router.use(authenticateToken);
 router.post('/advisor-chat', aiLimiter, handleAdvisorChat);
@@ -17,3 +20,4 @@ router.post('/policy-upload', authorizeRoles('SUPER_ADMIN', 'DEAN'), handlePolic
 router.post('/schedule-meeting', scheduleMeetingDirect);
 
 export default router;
+

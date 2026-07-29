@@ -123,6 +123,16 @@ CREATE TABLE IF NOT EXISTS public.advisory_records (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- AI Generated Advisories Table
+CREATE TABLE IF NOT EXISTS public.ai_generated_advisories (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  entity_id UUID NOT NULL,
+  risk_level TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  ai_output_json JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 4. Enable Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
@@ -131,8 +141,12 @@ ALTER TABLE public.courses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attendance_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.academic_policies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.advisory_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ai_generated_advisories ENABLE ROW LEVEL SECURITY;
 
 -- 5. RLS Policies
+DROP POLICY IF EXISTS "Public select ai_generated_advisories" ON public.ai_generated_advisories;
+CREATE POLICY "Public select ai_generated_advisories" ON public.ai_generated_advisories FOR ALL USING (true);
+
 -- Profiles
 DROP POLICY IF EXISTS "Public select profiles" ON public.profiles;
 CREATE POLICY "Public select profiles" ON public.profiles FOR SELECT USING (true);

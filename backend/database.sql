@@ -146,3 +146,19 @@ CREATE POLICY "Public read for policies" ON academic_policies
 
 CREATE POLICY "Admin policy management" ON academic_policies
   FOR ALL USING ((SELECT role FROM profiles WHERE id = auth.uid()) IN ('SUPER_ADMIN', 'DEAN'));
+
+-- 8. AI Generated Advisories Table
+CREATE TABLE IF NOT EXISTS ai_generated_advisories (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  entity_id UUID NOT NULL,
+  risk_level TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  ai_output_json JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE ai_generated_advisories ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public or authenticated access to ai_generated_advisories" ON ai_generated_advisories
+  FOR ALL USING (true);
+

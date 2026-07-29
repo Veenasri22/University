@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import api from '../services/api.js';
+import { AiAnalysisButton } from '../components/AiAnalysisButton.jsx';
 import {
   Bot,
   Send,
@@ -12,6 +13,7 @@ import {
   CheckCircle2,
   ExternalLink
 } from 'lucide-react';
+
 
 export const AIAdvisor = () => {
   const [agentType, setAgentType] = useState('COURSE_PLANNER');
@@ -118,6 +120,9 @@ export const AIAdvisor = () => {
           })}
         </div>
       </div>
+
+      {/* Manual AI Assessment & Advisory Generator Component */}
+      <AiAnalysisButton />
 
       {/* MCP Action Notification Box */}
       {mcpEvent && (

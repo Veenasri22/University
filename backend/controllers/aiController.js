@@ -3,6 +3,10 @@ import { runMultiAgentAdvisor } from '../services/geminiService.js';
 import { searchPolicies, uploadPolicy } from '../services/ragService.js';
 import { scheduleGoogleCalendarMeeting, dispatchGmailAlert } from '../services/mcpService.js';
 import { mockStore } from '../services/mockStore.js';
+import { generateAdvisory } from '../services/aiService.js';
+import { supabase } from '../config/db.js';
+import crypto from 'crypto';
+
 
 export const handleAdvisorChat = async (req, res, next) => {
   try {
@@ -103,3 +107,62 @@ export const scheduleMeetingDirect = async (req, res, next) => {
     next(err);
   }
 };
+
+export const handleGenerateAdvisory = async (req, res, next) => {
+  try {
+    const { entityId, payload } = req.body;
+
+    if (!entityId || !payload) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both entityId and payload are required in request body'
+      });
+    }
+
+    // Pass payload to AI Service
+    const aiOutput = await generateAdvisory({ entityId, payload });
+
+    const generatedRecord = {
+      id: crypto.randomUUID(),
+      entity_id: entityId,
+      risk_level: aiOutput.riskLevel,
+      summary: aiOutput.summary,
+      ai_output_json: aiOutput,
+      created_at: new Date().toISOString()
+    };
+
+    let savedRecord = generatedRecord;
+
+    // Insert record into Supabase PostgreSQL table ai_generated_advisories if client is active
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('ai_generated_advisories')
+        .insert([{
+          entity_id: entityId,
+          risk_level: aiOutput.riskLevel,
+          summary: aiOutput.summary,
+          ai_output_json: aiOutput
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.warn('[Database] Supabase insert error for advisory, using fallback store:', error.message);
+        mockStore.ai_generated_advisories.push(generatedRecord);
+      } else if (data) {
+        savedRecord = data;
+      }
+    } else {
+      mockStore.ai_generated_advisories.push(generatedRecord);
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'AI Assessment Advisory generated and stored successfully',
+      data: savedRecord
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

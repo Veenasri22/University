@@ -38,7 +38,10 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+import { handleGenerateAdvisory } from './controllers/aiController.js';
+
 // API Routes
+app.post('/api/generate-advisory', handleGenerateAdvisory);
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/faculty', facultyRoutes);
@@ -46,6 +49,7 @@ app.use('/api/courses', courseRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/reports', reportRoutes);
+
 
 // Centralized Error Handling
 app.use(errorHandler);

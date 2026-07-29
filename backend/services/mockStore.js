@@ -347,5 +347,8 @@ export const mockStore = {
       assumptions_confirmed: true,
       created_at: new Date(Date.now() - 86400000 * 5).toISOString()
     }
-  ]
+  ],
+
+  ai_generated_advisories: []
 };
+
