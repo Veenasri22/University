@@ -92,9 +92,10 @@ export const AIAdvisor = () => {
           <div>
             <h1 className="text-xl font-extrabold text-white font-outfit">Multi-Agent Academic Advisor Network</h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              Select a specialized agent powered by Gemini 2.5 Flash & Enterprise Policy RAG context.
+              Select a specialized conversational agent powered directly by OpenAI ChatGPT (gpt-4o-mini).
             </p>
           </div>
+
         </div>
 
         {/* Agent Selector Chips */}

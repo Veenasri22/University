@@ -138,14 +138,15 @@ export const AiAdvisorPage = () => {
             </div>
             <div>
               <h1 className="text-xl font-extrabold text-white font-outfit flex items-center gap-2">
-                Interactive AI Academic Advisor
-                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  gemini-2.5-flash
+                Interactive ChatGPT AI Academic Advisor
+                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  gpt-4o-mini
                 </span>
               </h1>
               <p className="text-xs text-slate-400 mt-0.5">
-                Empathetic academic guidance, degree audit planning, course selection, and study strategies.
+                Empathetic ChatGPT guidance for degree audit planning, course selection, and study strategies.
               </p>
+
             </div>
           </div>
 

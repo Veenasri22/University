@@ -1,11 +1,11 @@
-import { generateAdvisorChatResponse } from '../services/advisorService.js';
+import { generateChatGPTResponse } from '../services/advisorService.js';
 import { supabase } from '../config/db.js';
 import { mockStore } from '../services/mockStore.js';
 import crypto from 'crypto';
 
 /**
  * Handle POST /api/advisor/chat
- * Manages chat session auto-creation, message history logging, AI response generation,
+ * Manages chat session auto-creation, message history logging, ChatGPT response generation,
  * and Supabase persistence. Zero dummy data - relies strictly on user input.
  */
 export const handleAdvisorChat = async (req, res, next) => {
@@ -88,11 +88,9 @@ export const handleAdvisorChat = async (req, res, next) => {
         .map(m => ({ sender: m.sender, message_text: m.message_text }));
     }
 
-    // 4. Generate AI Response via Gemini SDK
-    const aiResponseText = await generateAdvisorChatResponse({
-      userQuestion: userQuestion.trim(),
-      history
-    });
+    // 4. Generate ChatGPT AI Response (gpt-4o-mini)
+    const aiResponseText = await generateChatGPTResponse(userQuestion.trim(), history);
+
 
     // 5. Save Gemini AI response directly into advisor_messages (sender: 'assistant')
     const assistantMsgRecord = {
