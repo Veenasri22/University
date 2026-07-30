@@ -19,6 +19,10 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Trust first proxy hop (required on Render / any reverse-proxy deployment)
+// Allows express-rate-limit to correctly read X-Forwarded-For header
+app.set('trust proxy', 1);
+
 // Security & Middleware
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: '*', credentials: true }));
