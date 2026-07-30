@@ -112,17 +112,45 @@ Provide a clear, helpful, evidence-backed answer. If scheduling or emailing is r
     }
   }
 
-  // Fallback response generator tailored to agent types
-  let responseText = '';
+  // Smart Fallback generator tailored to agent types and user prompt
+  const pLower = (message || '').toLowerCase().trim();
+
+  let agentRoleName = 'Academic AI Advisor';
+  let adviceBody = '';
+
   if (agentType === 'COURSE_PLANNER') {
-    responseText = `[Course Planner Agent]\nBased on your degree trajectory and current credits, I recommend completing core prerequisites this semester. According to university policy, maintaining a minimum 3.0 in foundational courses is critical for capstone eligibility. Would you like me to reserve an advisor calendar slot to finalize your course schedule?`;
+    agentRoleName = 'Course Planner Agent';
+    if (pLower.includes('prerequisite') || pLower.includes('prereq') || pLower.includes('dependency')) {
+      adviceBody = `To fulfill prerequisite requirements for your course pathway, complete foundational core modules with a minimum grade of C (2.00 GPA). Department policy requires passing lower-level dependencies prior to registering for capstone and 300/400-level electives.`;
+    } else if (pLower.includes('schedule') || pLower.includes('register') || pLower.includes('term') || pLower.includes('semester')) {
+      adviceBody = `For optimal academic balance, we recommend registering for 12-15 credit hours consisting of 2 core technical subjects and 2 lower-workload general electives.`;
+    } else {
+      adviceBody = `Based on degree audit guidelines, ensure your credit milestones align with departmental roadmap standards. Check course availability and registration windows in the student portal.`;
+    }
   } else if (agentType === 'FINANCIAL_AID') {
-    responseText = `[Financial Aid Policy Agent]\nUnder institutional guidelines, federal Title IV financial aid requires maintaining at least a 2.0 GPA and 75% attendance rate. Your current record is monitored. Please review Policy 4.2 for SAP (Satisfactory Academic Progress) criteria.`;
+    agentRoleName = 'Financial Aid Policy Agent';
+    if (pLower.includes('sap') || pLower.includes('probation') || pLower.includes('warning')) {
+      adviceBody = `Satisfactory Academic Progress (SAP) under Federal Title IV criteria requires maintaining a cumulative GPA >= 2.00 and completing >= 67% of attempted credit hours. Failure to meet these metrics puts financial aid eligibility on Warning status.`;
+    } else if (pLower.includes('scholarship') || pLower.includes('grant') || pLower.includes('tuition')) {
+      adviceBody = `Institutional merit scholarships are evaluated at the close of each spring semester. Maintaining a 3.20+ GPA keeps institutional grant aid active.`;
+    } else {
+      adviceBody = `Financial aid distributions depend on full-time enrollment status (minimum 12 credit hours/term) and active course attendance.`;
+    }
   } else if (agentType === 'CAREER_PATHWAY') {
-    responseText = `[Career Pathway Agent]\nYour current academic performance places you in a strong position for department internship programs. I suggest exploring undergraduate research opportunities or setting up a resume review session with career services.`;
+    agentRoleName = 'Career Pathway Agent';
+    if (pLower.includes('intern') || pLower.includes('job') || pLower.includes('work')) {
+      adviceBody = `Target departmental internship opportunities through the Career Center portal. Academic credit (up to 3 credits) can be awarded for approved industry roles.`;
+    } else if (pLower.includes('research') || pLower.includes('thesis') || pLower.includes('faculty')) {
+      adviceBody = `Undergraduate research positions are open to students with a 3.0+ GPA. Connect with department faculty leads to apply for lab assistantships.`;
+    } else {
+      adviceBody = `Align your coursework with industry certifications and update your LinkedIn profile for upcoming university campus recruitment fairs.`;
+    }
   } else {
-    responseText = `[Academic AI Advisor]\nThank you for reaching out. Based on our institutional policy database, I am here to help you navigate course selection, GPA recovery, and administrative procedures. Let me know if you would like me to trigger an automated meeting request with your faculty advisor!`;
+    agentRoleName = 'General Academic Agent';
+    adviceBody = `Regarding your inquiry ("${message}"): Please review active university policy guidelines, consult your syllabus for milestone deadlines, and contact your assigned faculty mentor for customized academic support.`;
   }
+
+  const responseText = `[${agentRoleName}]\nRegarding: "${message}"\n\n${adviceBody}\n\nWould you like me to schedule an advising appointment or generate an action plan for you?`;
 
   return {
     text: responseText,
@@ -183,7 +211,7 @@ Department Aggregate Data: ${JSON.stringify(departmentData)}`,
 
 /**
  * Service function to generate a dynamic AI answer for general user prompts.
- * Uses @google/genai SDK with model gemini-2.5-flash and includes conversation context.
+ * Uses @google/genai SDK with model gemini-2.0-flash and includes conversation context.
  *
  * @param {string} userPrompt - User's typed question
  * @param {Array<{ sender: string, message_text: string }>} [conversationHistory] - Past chat messages
@@ -227,19 +255,60 @@ export async function generateAiAnswer(userPrompt, conversationHistory = []) {
 }
 
 /**
- * Fallback response generator for unconfigured GEMINI_API_KEY mode
+ * Fallback response generator for unconfigured GEMINI_API_KEY / quota limit mode
  */
 function fallbackAiAnswer(prompt) {
-  const pLower = prompt.toLowerCase();
+  const pLower = (prompt || '').toLowerCase().trim();
 
   if (pLower.includes('hello') || pLower.includes('hi') || pLower.includes('hey')) {
     return "Hello! I am your Google Gemini AI Assistant. How can I assist you with your academic goals, course questions, or university inquiries today?";
   }
 
-  if (pLower.includes('help') || pLower.includes('can you')) {
-    return `I am fully equipped to assist you with "${prompt}". I can analyze academic performance, provide course planning guidance, summarize institutional policies, or suggest study strategies. What specific details would you like to explore?`;
+  if (pLower.includes('gpa') || pLower.includes('grade') || pLower.includes('score') || pLower.includes('marks')) {
+    return `Regarding your GPA question ("${prompt}"):
+
+1. **GPA Calculation**: Grade points are weighted by course credit hours (A = 4.0, B = 3.0, C = 2.0, D = 1.0, F = 0.0).
+2. **Grade Replacement Policy**: Repeating an eligible course replaces the prior grade in cumulative GPA calculations.
+3. **Academic Standing**: Maintaining a GPA >= 2.00 is required to remain in good standing. Below 2.00 triggers an Academic Warning status.`;
   }
 
-  return `Thank you for your question: "${prompt}". As your AI Assistant, I recommend reviewing your active course outline, checking institutional policy guidelines, and connecting with your academic advisor for personalized guidance. Is there anything specific you would like me to clarify?`;
+  if (pLower.includes('course') || pLower.includes('register') || pLower.includes('prereq') || pLower.includes('major')) {
+    return `Regarding your course inquiry ("${prompt}"):
+
+1. **Registration**: Check prerequisite completion in your student degree audit before enrolling.
+2. **Workload Balance**: Combine 2 technical/quantitative subjects with 2 general education electives per term.
+3. **Department Consultation**: Contact your academic advisor if you need a prerequisite waiver or transfer credit evaluation.`;
+  }
+
+  if (pLower.includes('financial') || pLower.includes('aid') || pLower.includes('scholarship') || pLower.includes('tuition')) {
+    return `Regarding your financial aid question ("${prompt}"):
+
+1. **SAP Criteria**: Federal aid requires completing at least 67% of attempted credits with a cumulative GPA of at least 2.00.
+2. **Disbursements**: Funds are released following verification of course attendance during the census period.
+3. **Support**: Contact the Financial Aid Office or visit your student billing portal for personalized assistance.`;
+  }
+
+  if (pLower.includes('drop') || pLower.includes('add') || pLower.includes('withdraw') || pLower.includes('deadline')) {
+    return `Regarding your drop/add deadline question ("${prompt}"):
+
+1. **Add/Drop Window**: Courses dropped within the first 14 days of the semester do not appear on your official transcript and receive a 100% tuition credit refund.
+2. **Course Withdrawal ('W' Grade)**: Withdrawing after Week 2 through Week 10 results in a grade of 'W'. This does not affect cumulative GPA, but counts as attempted credits for SAP completion rate.
+3. **Important Deadlines**: Check your academic calendar in the student portal under **Registrar > Deadlines** to verify key dates.`;
+  }
+
+  if (pLower.includes('study') || pLower.includes('exam') || pLower.includes('test') || pLower.includes('time')) {
+    return `Regarding your study and exam preparation question ("${prompt}"):
+
+1. **Spaced Repetition & Active Recall**: Review material in 45-minute blocks rather than marathon cramming sessions.
+2. **Faculty Office Hours**: Visit your instructor or TA office hours to clarify difficult concepts prior to exam week.
+3. **Peer Tutoring**: Access free campus tutoring sessions for foundational STEM and humanities courses.`;
+  }
+
+  return `Thank you for your question: "${prompt}".
+
+As your Google Gemini AI Assistant, here is guidance regarding your inquiry:
+- **Overview**: Your query directly touches on academic performance and institutional procedures.
+- **Recommended Action**: Review relevant course syllabi and institutional handbook guidelines in the portal, or consult your advisor for tailored recommendations.
+- **Follow-up**: Please let me know if you would like specific steps or policy references regarding "${prompt}".`;
 }
 

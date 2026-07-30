@@ -16,4 +16,4 @@ if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_google_ge
 }
 
 export const ai = aiInstance;
-export const GEMINI_MODEL = 'gemini-2.5-flash';
+export const GEMINI_MODEL = 'gemini-2.0-flash';

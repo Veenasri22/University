@@ -19,13 +19,19 @@ export const handleAdvisorChat = async (req, res, next) => {
       message_text: h.text || h.message_text || ''
     }));
 
-    // Call ChatGPT directly without document vector search / policy RAG
-    const aiResponseText = await generateChatGPTResponse(validated.message, history);
+    const agentType = validated.agent_type || 'ACADEMIC_ADVISOR';
+
+    // Route through multi-agent advisor engine
+    const advisorResult = await runMultiAgentAdvisor({
+      message: validated.message,
+      agentType,
+      chatHistory: history
+    });
 
     res.json({
       success: true,
-      agent: validated.agent_type || 'ACADEMIC_ADVISOR',
-      reply: aiResponseText
+      agent: advisorResult.agent || agentType,
+      reply: advisorResult.text
     });
   } catch (err) {
     next(err);
