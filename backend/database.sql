@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS courses (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   course_code TEXT UNIQUE NOT NULL,
   title TEXT NOT NULL,
+  course_name TEXT,
   department TEXT NOT NULL,
   credits INT NOT NULL,
   syllabus_progress NUMERIC(5,2) DEFAULT 0.00,
@@ -211,6 +212,7 @@ CREATE TABLE IF NOT EXISTS student_attendance (
   student_id UUID NOT NULL,
   course_id UUID NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('Present', 'Absent')),
+  verification_status TEXT DEFAULT 'Verified',
   date DATE NOT NULL DEFAULT CURRENT_DATE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );

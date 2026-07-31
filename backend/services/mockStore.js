@@ -446,14 +446,14 @@ export const mockStore = {
 
   // ─── PERFORMANCE & SYLLABUS TRACKER STORES ─────────────────────────────
   student_attendance: [
-    { id: 'att-101', student_id: 'stu-101', course_id: 'crs-001', status: 'Present', date: '2026-07-25' },
-    { id: 'att-102', student_id: 'stu-101', course_id: 'crs-001', status: 'Present', date: '2026-07-26' },
-    { id: 'att-103', student_id: 'stu-101', course_id: 'crs-001', status: 'Absent', date: '2026-07-27' },
-    { id: 'att-104', student_id: 'stu-101', course_id: 'crs-001', status: 'Present', date: '2026-07-28' },
-    { id: 'att-105', student_id: 'stu-101', course_id: 'crs-002', status: 'Present', date: '2026-07-25' },
-    { id: 'att-106', student_id: 'stu-101', course_id: 'crs-002', status: 'Absent', date: '2026-07-26' },
-    { id: 'att-107', student_id: 'stu-101', course_id: 'crs-002', status: 'Present', date: '2026-07-27' },
-    { id: 'att-108', student_id: 'stu-101', course_id: 'crs-002', status: 'Present', date: '2026-07-28' }
+    { id: 'att-101', student_id: 'stu-101', course_id: 'crs-001', status: 'Present', verification_status: 'Biometric Verified', date: '2026-07-25' },
+    { id: 'att-102', student_id: 'stu-101', course_id: 'crs-001', status: 'Present', verification_status: 'Verified', date: '2026-07-26' },
+    { id: 'att-103', student_id: 'stu-101', course_id: 'crs-001', status: 'Absent', verification_status: 'Manual Verification', date: '2026-07-27' },
+    { id: 'att-104', student_id: 'stu-101', course_id: 'crs-001', status: 'Present', verification_status: 'Classroom RFID', date: '2026-07-28' },
+    { id: 'att-105', student_id: 'stu-101', course_id: 'crs-002', status: 'Present', verification_status: 'Biometric Verified', date: '2026-07-25' },
+    { id: 'att-106', student_id: 'stu-101', course_id: 'crs-002', status: 'Absent', verification_status: 'Pending', date: '2026-07-26' },
+    { id: 'att-107', student_id: 'stu-101', course_id: 'crs-002', status: 'Present', verification_status: 'Classroom RFID', date: '2026-07-27' },
+    { id: 'att-108', student_id: 'stu-101', course_id: 'crs-002', status: 'Present', verification_status: 'Verified', date: '2026-07-28' }
   ],
 
   course_syllabus: [
