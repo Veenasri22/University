@@ -205,5 +205,34 @@ ALTER TABLE ai_chat_messages ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public access to ai_sessions" ON ai_sessions FOR ALL USING (true);
 CREATE POLICY "Public access to ai_chat_messages" ON ai_chat_messages FOR ALL USING (true);
 
+-- 11. Performance & Syllabus Tracker Tables
+CREATE TABLE IF NOT EXISTS student_attendance (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  student_id UUID NOT NULL,
+  course_id UUID NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('Present', 'Absent')),
+  date DATE NOT NULL DEFAULT CURRENT_DATE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS course_syllabus (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  course_id UUID NOT NULL,
+  faculty_id UUID NOT NULL,
+  unit_title TEXT NOT NULL,
+  topics_covered TEXT NOT NULL,
+  completion_percentage INT NOT NULL DEFAULT 0 CHECK (completion_percentage >= 0 AND completion_percentage <= 100),
+  status TEXT NOT NULL CHECK (status IN ('Completed', 'In Progress', 'Pending')),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE student_attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE course_syllabus ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public access to student_attendance" ON student_attendance FOR ALL USING (true);
+CREATE POLICY "Public access to course_syllabus" ON course_syllabus FOR ALL USING (true);
+
+
 
 

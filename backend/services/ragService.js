@@ -1,9 +1,9 @@
 import { mockStore } from './mockStore.js';
 import { supabase } from '../config/db.js';
-import { ai, GEMINI_MODEL } from '../config/gemini.js';
+import { groq, GROQ_MODEL } from '../config/groq.js';
 
 export async function searchPolicies({ query, department }) {
-  // If Supabase vector search is available
+  // If Supabase text search is available
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -15,7 +15,7 @@ export async function searchPolicies({ query, department }) {
         return data;
       }
     } catch (e) {
-      console.warn('[RAG Service] Supabase vector query fallback:', e.message);
+      console.warn('[RAG Service] Supabase query fallback:', e.message);
     }
   }
 
@@ -28,24 +28,22 @@ export async function searchPolicies({ query, department }) {
 
   const results = matched.length > 0 ? matched : mockStore.policies.slice(0, 2);
 
-  // If Gemini API is available, generate contextual answer over matched documents
+  // If Groq API is available, generate contextual answer over matched documents
   let aiAnswer = null;
-  if (ai) {
+  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
     try {
       const contextText = results.map(r => `Document: ${r.title}\nCategory: ${r.category}\nContent: ${r.content}`).join('\n\n');
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: `You are an academic policy expert RAG system.
-Based strictly on the following policy documents, answer the user query clearly with exact section citations.
-
-POLICY DOCUMENTS:
-${contextText}
-
-USER QUERY: "${query}"`,
+      const response = await groq.chat.completions.create({
+        model: GROQ_MODEL,
+        messages: [
+          { role: 'system', content: 'You are an academic policy expert RAG system. Based strictly on the provided policy documents, answer the user query clearly with exact citations.' },
+          { role: 'user', content: `POLICY DOCUMENTS:\n${contextText}\n\nUSER QUERY: "${query}"` }
+        ],
+        temperature: 0.3
       });
-      aiAnswer = response.text;
+      aiAnswer = response.choices[0]?.message?.content?.trim();
     } catch (e) {
-      console.error('[Gemini API] RAG Answer generation failed:', e.message);
+      console.error('[Groq API] RAG Answer generation failed:', e.message);
     }
   }
 

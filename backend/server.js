@@ -10,17 +10,19 @@ import courseRoutes from './routes/courseRoutes.js';
 import attendanceRoutes from './routes/attendanceRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
+import advisorRoutes from './routes/advisorRoutes.js';
+import trackerRoutes from './routes/trackerRoutes.js';
 
 import { apiLimiter } from './middleware/rateLimiter.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { handleGenerateAdvisory, handleAskAi } from './controllers/aiController.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Trust first proxy hop (required on Render / any reverse-proxy deployment)
-// Allows express-rate-limit to correctly read X-Forwarded-For header
+// Trust first proxy hop
 app.set('trust proxy', 1);
 
 // Security & Middleware
@@ -37,13 +39,10 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ONLINE',
     service: 'University Academic Intelligence Platform API',
-    geminiConfigured: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_google_gemini_api_key'),
+    groqConfigured: Boolean(process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key'),
     timestamp: new Date().toISOString()
   });
 });
-
-import advisorRoutes from './routes/advisorRoutes.js';
-import { handleGenerateAdvisory, handleAskAi } from './controllers/aiController.js';
 
 // API Routes
 app.post('/api/generate-advisory', handleGenerateAdvisory);
@@ -56,9 +55,7 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/advisor', advisorRoutes);
 app.use('/api/reports', reportRoutes);
-
-
-
+app.use('/api/tracker', trackerRoutes);
 
 // Centralized Error Handling
 app.use(errorHandler);

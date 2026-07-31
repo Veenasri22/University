@@ -1,5 +1,5 @@
 import { mockStore } from '../services/mockStore.js';
-import { ai, GEMINI_MODEL } from '../config/gemini.js';
+import { groq, GROQ_MODEL } from '../config/groq.js';
 
 export const getFaculty = async (req, res, next) => {
   try {
@@ -29,15 +29,21 @@ export const getFacultyInsights = async (req, res, next) => {
 
     let aiSentimentSummary = 'Faculty members maintain high teaching satisfaction (4.7/5.0). Workload balance is optimal across 75% of staff, though Department Chairs require administrative offset due to advisory load.';
 
-    if (ai) {
+    if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
       try {
-        const response = await ai.models.generateContent({
-          model: GEMINI_MODEL,
-          contents: `Synthesize faculty teaching ratings and workload distribution into a 2-sentence executive summary: ${JSON.stringify(mockStore.faculty)}`
+        const response = await groq.chat.completions.create({
+          model: GROQ_MODEL,
+          messages: [
+            { role: 'system', content: 'You are a university academic analyst.' },
+            { role: 'user', content: `Synthesize faculty teaching ratings and workload distribution into a 2-sentence executive summary: ${JSON.stringify(mockStore.faculty)}` }
+          ],
+          temperature: 0.3
         });
-        aiSentimentSummary = response.text;
+        if (response.choices[0]?.message?.content) {
+          aiSentimentSummary = response.choices[0].message.content.trim();
+        }
       } catch (e) {
-        console.warn('[Gemini AI] Faculty insights synthesis fallback');
+        console.warn('[Groq AI] Faculty insights synthesis fallback:', e.message);
       }
     }
 

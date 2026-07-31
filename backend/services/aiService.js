@@ -1,8 +1,8 @@
-import { ai, GEMINI_MODEL } from '../config/gemini.js';
+import { groq, GROQ_MODEL } from '../config/groq.js';
 
 /**
- * AI Service for Academic Analysis & Advisory Generation
- * Utilizes @google/genai SDK with gemini-2.5-flash model and structured JSON output schema.
+ * AI Service for Academic Analysis & Advisory Generation using Groq SDK.
+ * Model: llama-3.3-70b-versatile
  *
  * @param {Object} params
  * @param {string} params.entityId - UUID of the entity (e.g. Student ID)
@@ -12,57 +12,32 @@ import { ai, GEMINI_MODEL } from '../config/gemini.js';
 export const generateAdvisory = async ({ entityId, payload }) => {
   const payloadStr = typeof payload === 'object' ? JSON.stringify(payload, null, 2) : String(payload);
 
-  const prompt = `You are an expert Academic Advisor & Data Analyst AI operating within a University Intelligence System.
-Analyze the following student/academic performance data submitted for Entity ID "${entityId}":
+  const systemPrompt = `You are an expert Academic Advisor & Data Analyst AI operating within a University Intelligence System.
+Analyze the provided student/academic performance data and output strictly a JSON object with:
+- "riskLevel": ("LOW", "MEDIUM", or "HIGH")
+- "summary": (concise executive summary)
+- "actionSteps": (array of 3-5 concrete action steps)
+- "followUpQuestions": (array of 2-3 probing follow-up questions)
 
-User Submitted Data/Payload:
-${payloadStr}
+Return ONLY valid JSON matching this schema, with no markdown formatting around it if possible.`;
 
-Perform a rigorous evaluation and output an advisory response matching the required JSON schema with:
-1. "riskLevel": Evaluated overall academic risk level ("LOW", "MEDIUM", or "HIGH").
-2. "summary": A concise executive summary of the entity's status, key performance metrics, and identified risks.
-3. "actionSteps": An array of 3-5 concrete, actionable academic intervention steps for the student or advisor.
-4. "followUpQuestions": An array of 2-3 probing follow-up questions to investigate further.`;
+  const userPrompt = `Entity ID: "${entityId}"\nData Payload:\n${payloadStr}`;
 
-  // Check if official SDK instance is initialized
-  if (ai) {
+  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
     try {
-      console.log(`[AI Service] Invoking ${GEMINI_MODEL} generateContent for Entity: ${entityId}`);
+      console.log(`[AI Service] Invoking Groq ${GROQ_MODEL} for Entity: ${entityId}`);
 
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            properties: {
-              riskLevel: {
-                type: 'STRING',
-                enum: ['LOW', 'MEDIUM', 'HIGH']
-              },
-              summary: {
-                type: 'STRING'
-              },
-              actionSteps: {
-                type: 'ARRAY',
-                items: {
-                  type: 'STRING'
-                }
-              },
-              followUpQuestions: {
-                type: 'ARRAY',
-                items: {
-                  type: 'STRING'
-                }
-              }
-            },
-            required: ['riskLevel', 'summary', 'actionSteps', 'followUpQuestions']
-          }
-        }
+      const response = await groq.chat.completions.create({
+        model: GROQ_MODEL,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.3
       });
 
-      const rawText = response.text;
+      const rawText = response.choices[0]?.message?.content || '{}';
       const parsedJSON = JSON.parse(rawText);
 
       return {
@@ -72,29 +47,25 @@ Perform a rigorous evaluation and output an advisory response matching the requi
         followUpQuestions: Array.isArray(parsedJSON.followUpQuestions) ? parsedJSON.followUpQuestions : []
       };
     } catch (err) {
-      console.error('[AI Service Error] Gemini SDK generateContent failed:', err.message);
+      console.error('[AI Service Error] Groq API failed:', err.message);
       console.log('[AI Service] Falling back to intelligent heuristic evaluation engine...');
     }
   }
 
-  // Fallback Heuristic Analysis Engine when API key is unconfigured or call fails
   return fallbackHeuristicAnalysis(entityId, payloadStr);
 };
 
-/**
- * Fallback Heuristic Analysis Engine for offline development / missing key mode
- */
 function fallbackHeuristicAnalysis(entityId, payloadText) {
   const textLower = payloadText.toLowerCase();
 
   let riskLevel = 'LOW';
-  if (textLower.includes('probation') || textLower.includes('fail') || textLower.includes('dip') || textLower.includes('struggling') || textLower.includes('gpa: 1') || textLower.includes('gpa: 2.0') || textLower.includes('attendance: 5') || textLower.includes('attendance: 6')) {
+  if (textLower.includes('probation') || textLower.includes('fail') || textLower.includes('struggling') || textLower.includes('gpa: 1') || textLower.includes('gpa: 2.0') || textLower.includes('attendance: 5') || textLower.includes('attendance: 6')) {
     riskLevel = 'HIGH';
   } else if (textLower.includes('warning') || textLower.includes('moderate') || textLower.includes('gpa: 2') || textLower.includes('attendance: 7')) {
     riskLevel = 'MEDIUM';
   }
 
-  const summary = `Manual Assessment generated for Entity ${entityId}. Key signals analyzed: ${payloadText.length} characters of user data evaluated. Identified overall risk standing as ${riskLevel}.`;
+  const summary = `Assessment generated for Entity ${entityId}. Key signals analyzed from user payload. Overall risk standing evaluated as ${riskLevel}.`;
 
   const actionSteps = [
     `Schedule an immediate academic advising session for entity ${entityId}.`,

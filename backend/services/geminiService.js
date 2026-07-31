@@ -1,314 +1,337 @@
-import { ai, GEMINI_MODEL } from '../config/gemini.js';
+import { groq, GROQ_MODEL } from '../config/groq.js';
 
-const SYSTEM_INSTRUCTION = `You are the Academic Intelligence Engine for higher education institutions. Your duty is to analyze student performance metrics, faculty effectiveness data, and institutional policies to offer objective, evidence-based academic insights.
+// ─── MASTER SYSTEM INSTRUCTION ───────────────────────────────────────────────
 
-CRITICAL OPERATIONAL RULES:
-1. Always base risk assessments on verified data (GPA trends, attendance rates, course completion).
-2. Explicitly label predictive recommendations as algorithmic assessments requiring human advisor review.
-3. Never output speculative statements as absolute facts.
-4. Maintain a professional, encouraging, and academically rigorous tone.`;
+const ACADEMIC_INTELLIGENCE_SYSTEM = `You are the Lead Academic Intelligence Officer & Predictive Systems Analyst for a modern Higher Education Institution.
+Your objective is to analyze complex academic data streams—including student attendance, assessment marks, CGPA trends, curriculum delivery pace, and faculty teaching workloads—to generate actionable, hyper-accurate, and data-driven institutional insights.
 
-export async function predictStudentRisk(studentData) {
-  if (ai) {
+OPERATIONAL CONSTRAINTS:
+1. Strict JSON Output: You MUST return responses strictly in valid JSON format matching the requested schema. No markdown code blocks outside JSON, no conversational text outside JSON.
+2. Explicit Assumptions: You MUST explicitly list all assumptions made when filling in missing data or projecting future performance trends.
+3. Confidence Level: You MUST provide an objective confidence score between 0.00 and 1.00 based on completeness.
+4. Human Verification Rule: Every recommendation must explicitly advise verification by institutional administrators before execution.`;
+
+const ADVISOR_SYSTEM = `You are an empathetic, expert AI Academic Advisor. Provide clear, accurate, and direct answers to user questions.`;
+
+// ─── GROQ COMPLETION HELPERS ──────────────────────────────────────────────────
+
+async function generateGroqCompletion(prompt, systemInstruction = ADVISOR_SYSTEM) {
+  if (!process.env.GROQ_API_KEY || process.env.GROQ_API_KEY === 'your_groq_api_key') {
+    throw new Error('GROQ_API_KEY is not configured');
+  }
+
+  const response = await groq.chat.completions.create({
+    model: GROQ_MODEL,
+    messages: [
+      { role: 'system', content: systemInstruction },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.3
+  });
+
+  return response.choices[0]?.message?.content?.trim() || '';
+}
+
+async function generateGroqStructured(prompt, schemaInstruction, systemInstruction = ACADEMIC_INTELLIGENCE_SYSTEM) {
+  if (!process.env.GROQ_API_KEY || process.env.GROQ_API_KEY === 'your_groq_api_key') {
+    throw new Error('GROQ_API_KEY is not configured');
+  }
+
+  const fullSystemPrompt = `${systemInstruction}\n\nSchema Guidelines: ${schemaInstruction}`;
+
+  const response = await groq.chat.completions.create({
+    model: GROQ_MODEL,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: fullSystemPrompt },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.3
+  });
+
+  const content = response.choices[0]?.message?.content?.trim();
+  return JSON.parse(content);
+}
+
+// ─── 1. STUDENT PERFORMANCE RISK PREDICTION ───────────────────────────────────
+
+export async function predictStudentPerformance({ studentId, department, program, semester, cgpa, attendancePct, assessments }) {
+  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
     try {
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: `Analyze the following student metrics and generate a performance risk prediction: ${JSON.stringify(studentData)}`,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            properties: {
-              riskLevel: { type: 'STRING', enum: ['LOW', 'MEDIUM', 'HIGH'] },
-              predictedGpa: { type: 'NUMBER' },
-              primaryRiskFactors: { type: 'ARRAY', items: { type: 'STRING' } },
-              recommendedInterventions: { type: 'ARRAY', items: { type: 'STRING' } },
-              advisorQuestions: { type: 'ARRAY', items: { type: 'STRING' } }
-            },
-            required: ['riskLevel', 'predictedGpa', 'primaryRiskFactors', 'recommendedInterventions']
-          }
-        }
-      });
+      const prompt = `Analyze student performance:
+Department: ${department} | Program: ${program} | Semester: ${semester}
+CGPA: ${cgpa} | Attendance: ${attendancePct}%
+Assessments: ${JSON.stringify(assessments)}
 
-      const parsed = JSON.parse(response.text);
-      return parsed;
-    } catch (error) {
-      console.error('[Gemini API] Prediction error, dropping back to heuristic model:', error.message);
+Return a JSON object with:
+"predictedCGPA": number,
+"riskLevel": ("Critical"|"High"|"Moderate"|"Low"|"On-Track"),
+"dropoutProbability": number (0.0 to 1.0),
+"keyRiskFactors": string[],
+"strengths": string[],
+"possibleRootCauses": string[],
+"confidenceScore": number (0.0 to 1.0),
+"assumptions": string[]`;
+
+      const result = await generateGroqStructured(prompt, 'Ensure all required keys are present.');
+      return result;
+    } catch (err) {
+      console.error('[Groq] predictStudentPerformance error, using heuristic:', err.message);
     }
   }
 
-  // Smart Heuristic Fallback
-  const gpa = Number(studentData.current_gpa || 3.0);
-  const attendance = Number(studentData.attendance_rate || 90.0);
+  // Heuristic Fallback
+  const gpa = Number(cgpa || 0);
+  const att = Number(attendancePct || 0);
 
-  let riskLevel = 'LOW';
-  let predictedGpa = Math.min(4.0, gpa + 0.1);
-  const primaryRiskFactors = [];
-  const recommendedInterventions = [];
-  const advisorQuestions = [];
+  let riskLevel = 'On-Track';
+  let dropoutProbability = 0.04;
+  let predictedCGPA = Math.min(4.0, gpa + 0.05);
+  const keyRiskFactors = [];
+  const strengths = [];
 
-  if (gpa < 2.5 || attendance < 75) {
-    riskLevel = 'HIGH';
-    predictedGpa = Math.max(1.8, gpa - 0.25);
-    primaryRiskFactors.push(`Low current GPA (${gpa.toFixed(2)}) below warning threshold of 2.50`);
-    if (attendance < 75) {
-      primaryRiskFactors.push(`Attendance rate (${attendance.toFixed(1)}%) below 75.0% institutional requirement`);
-    }
-    recommendedInterventions.push('Mandatory academic recovery meeting with assigned Department Advisor within 5 business days');
-    recommendedInterventions.push('Enrollment in peer-led subject tutoring workshops (minimum 3 hours/week)');
-    advisorQuestions.push('What specific external factors (workload, health, commuting) are impacting course attendance?');
-    advisorQuestions.push('Is the student considering course repeating for GPA recalculation under Policy 4.2?');
-  } else if (gpa < 3.2 || attendance < 85) {
-    riskLevel = 'MEDIUM';
-    predictedGpa = Number((gpa * 0.98).toFixed(2));
-    primaryRiskFactors.push(`Moderate GPA performance (${gpa.toFixed(2)}) with slight downward velocity`);
-    if (attendance < 85) {
-      primaryRiskFactors.push(`Sub-optimal attendance rate (${attendance.toFixed(1)}%)`);
-    }
-    recommendedInterventions.push('Bi-weekly academic progress reviews');
-    recommendedInterventions.push('Form study groups for mid-term exam prep');
-    advisorQuestions.push('Would time-management coaching assist with assignment submission consistency?');
+  if (gpa < 2.0 || att < 60) {
+    riskLevel = 'Critical';
+    dropoutProbability = 0.48;
+    predictedCGPA = Math.max(1.5, gpa - 0.3);
+    keyRiskFactors.push(`CGPA ${gpa.toFixed(2)} critically low`);
+    if (att < 60) keyRiskFactors.push(`Attendance ${att.toFixed(1)}% below 75% threshold`);
+  } else if (gpa < 2.5 || att < 75) {
+    riskLevel = 'High';
+    dropoutProbability = 0.28;
+    predictedCGPA = Math.max(1.8, gpa - 0.2);
+    keyRiskFactors.push(`GPA ${gpa.toFixed(2)} below warning threshold 2.50`);
   } else {
-    riskLevel = 'LOW';
-    predictedGpa = Math.min(4.0, Number((gpa + 0.05).toFixed(2)));
-    primaryRiskFactors.push('No significant risk factors identified. Consistently strong academic metrics.');
-    recommendedInterventions.push('Encourage application for undergraduate research grants and honors thesis enrollment');
-    advisorQuestions.push('Is the student interested in peer tutoring leadership roles?');
+    strengths.push(`Good GPA ${gpa.toFixed(2)} and attendance ${att.toFixed(1)}%`);
   }
 
   return {
+    predictedCGPA: Number(predictedCGPA.toFixed(2)),
     riskLevel,
-    predictedGpa,
-    primaryRiskFactors,
-    recommendedInterventions,
-    advisorQuestions
+    dropoutProbability: Number(dropoutProbability.toFixed(2)),
+    keyRiskFactors: keyRiskFactors.length ? keyRiskFactors : ['No critical risk factors identified'],
+    strengths: strengths.length ? strengths : ['Stable academic standing'],
+    possibleRootCauses: ['Insufficient historical data for root cause analysis'],
+    confidenceScore: 0.75,
+    assumptions: ['Extrapolated from current semester data']
   };
+}
+
+// ─── 2. PERSONALIZED ADVISOR RECOMMENDATIONS ─────────────────────────────────
+
+export async function generateAdvisorRecommendations({ studentId, department, program, semester, cgpa, attendancePct, riskLevel, specificConcerns }) {
+  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
+    try {
+      const prompt = `Generate advisor recommendations for student in ${program}, ${department}, Semester ${semester}. CGPA: ${cgpa}, Attendance: ${attendancePct}%, Risk: ${riskLevel}. Concerns: ${specificConcerns ? specificConcerns.join(', ') : 'None'}.
+
+Return JSON object:
+{
+  "immediateActions": string[],
+  "studyPlan": { "weeklySchedule": string, "priorityCourses": string[], "studyTechniques": string[] },
+  "courseSuggestions": string[],
+  "interventionTimeline": Array<{ "week": string, "milestone": string, "responsible": string }>,
+  "supportResources": string[],
+  "targetGPA": number,
+  "confidenceScore": number,
+  "assumptions": string[]
+}`;
+
+      return await generateGroqStructured(prompt, 'Return exact JSON structure requested.');
+    } catch (err) {
+      console.error('[Groq] generateAdvisorRecommendations error, using heuristic:', err.message);
+    }
+  }
+
+  const isHighRisk = (riskLevel || '').toUpperCase().includes('HIGH') || (riskLevel || '').toUpperCase().includes('CRITICAL');
+  return {
+    immediateActions: isHighRisk
+      ? ['Schedule emergency advising session', 'Enroll in mandatory peer tutoring']
+      : ['Review progress with advisor', 'Attend professor office hours'],
+    studyPlan: {
+      weeklySchedule: 'Dedicated 3-hour daily study blocks and weekly instructor check-ins',
+      priorityCourses: specificConcerns?.length ? specificConcerns : [`Core ${program} requirements`],
+      studyTechniques: ['Spaced repetition', 'Active recall', 'Pomodoro technique']
+    },
+    courseSuggestions: ['Maintain current course load', 'Add academic success module if needed'],
+    interventionTimeline: [
+      { week: 'Week 1-2', milestone: 'Initial advisor meeting', responsible: 'Academic Advisor' },
+      { week: 'Week 3-6', milestone: 'Peer tutoring sessions', responsible: 'Student + Faculty' }
+    ],
+    supportResources: ['University Success Center', 'Department Faculty Office Hours'],
+    targetGPA: Number(Math.min(4.0, (cgpa || 3.0) + 0.3).toFixed(2)),
+    confidenceScore: 0.75,
+    assumptions: ['Evaluated based on current GPA and attendance input']
+  };
+}
+
+// ─── 3. FACULTY PERFORMANCE INSIGHTS ──────────────────────────────────────────
+
+export async function generateFacultyInsights({ facultyId, facultyName, department, academicTerm, weeklyTeachingHours, avgStudentFeedback, courseCount, researchPublications }) {
+  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
+    try {
+      const prompt = `Analyze faculty performance: ${facultyName}, ${department}, Teaching Hours: ${weeklyTeachingHours}, Feedback: ${avgStudentFeedback}/5.0, Publications: ${researchPublications}.
+
+Return JSON:
+{
+  "effectivenessRating": ("Exceptional"|"Above Average"|"Satisfactory"|"Needs Improvement"|"Critical"),
+  "workloadStatus": ("Underloaded"|"Balanced"|"Overloaded"|"Critical Overload"),
+  "burnoutRisk": ("Low"|"Moderate"|"High"|"Critical"),
+  "keyStrengths": string[],
+  "areasForImprovement": string[],
+  "workloadRecommendations": string[],
+  "studentOutcomeImpact": string,
+  "confidenceScore": number,
+  "assumptions": string[]
+}`;
+
+      return await generateGroqStructured(prompt, 'Return exact JSON structure.');
+    } catch (err) {
+      console.error('[Groq] generateFacultyInsights error, using heuristic:', err.message);
+    }
+  }
+
+  return {
+    effectivenessRating: avgStudentFeedback >= 4.0 ? 'Above Average' : 'Satisfactory',
+    workloadStatus: weeklyTeachingHours > 40 ? 'Overloaded' : 'Balanced',
+    burnoutRisk: weeklyTeachingHours > 40 ? 'High' : 'Low',
+    keyStrengths: [`Student feedback rating ${avgStudentFeedback}/5.0`],
+    areasForImprovement: ['Optimize workload balance'],
+    workloadRecommendations: ['Maintain teaching workload within 40 hours limit'],
+    studentOutcomeImpact: 'Positive student engagement observed.',
+    confidenceScore: 0.80,
+    assumptions: ['Based on current teaching hours and feedback metrics']
+  };
+}
+
+// ─── 4. EXECUTIVE ACADEMIC REPORT ─────────────────────────────────────────────
+
+export async function generateExecutiveAcademicReport({ universityName, department, academicTerm, reportType, departmentData }) {
+  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
+    try {
+      const prompt = `Generate ${reportType} report for ${universityName}, Department: ${department}, Term: ${academicTerm}. Data: ${JSON.stringify(departmentData || {})}.
+
+Return JSON:
+{
+  "executiveSummary": string,
+  "attendanceTrends": string,
+  "curriculumCompletionStatus": string,
+  "facultyEffectivenessRating": string,
+  "academicAlerts": Array<{ "alertType": string, "severity": string, "affectedDepartment": string, "actionRequired": string }>,
+  "recommendations": { "forStudents": string[], "forFaculty": string[], "forDepartmentHeads": string[], "forUniversityLeadership": string[] },
+  "monitoringSchedule": Array<{ "milestone": string, "frequency": string, "responsibleParty": string }>,
+  "assumptions": string[],
+  "confidenceScore": number
+}`;
+
+      return await generateGroqStructured(prompt, 'Return valid executive report JSON.');
+    } catch (err) {
+      console.error('[Groq] generateExecutiveAcademicReport error, using heuristic:', err.message);
+    }
+  }
+
+  const data = departmentData || {};
+  return {
+    executiveSummary: `The ${department} department maintains an average attendance rate of ${data.avgAttendance || 85}% and GPA of ${data.avgGpa || 3.1}.`,
+    attendanceTrends: 'Departmental attendance remains stable above threshold.',
+    curriculumCompletionStatus: 'Syllabus completion is progressing according to term timeline.',
+    facultyEffectivenessRating: 'Faculty members are operating within expected institutional standards.',
+    academicAlerts: [
+      { alertType: 'Attendance Notice', severity: 'Moderate', affectedDepartment: department, actionRequired: 'Monitor students with attendance below 75%' }
+    ],
+    recommendations: {
+      forStudents: ['Maintain attendance above 85%'],
+      forFaculty: ['Submit weekly attendance logs'],
+      forDepartmentHeads: ['Review mid-term syllabus progress'],
+      forUniversityLeadership: ['Support department academic advising']
+    },
+    monitoringSchedule: [
+      { milestone: 'Weekly Attendance Review', frequency: 'Weekly', responsibleParty: 'Department Admin' }
+    ],
+    assumptions: ['Calculated from current active term metrics'],
+    confidenceScore: 0.80
+  };
+}
+
+// ─── 5. DIAGNOSTIC QUESTIONS GENERATOR ───────────────────────────────────────
+
+export async function generateDiagnosticQuestions({ context, entityType, dataSnapshot }) {
+  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
+    try {
+      const prompt = `Review ${entityType} context: ${context}, Snapshot: ${JSON.stringify(dataSnapshot || {})}.
+
+Return JSON:
+{
+  "diagnosticQuestions": Array<{ "question": string, "rationale": string, "priority": string, "targetAudience": string }>,
+  "dataGapsIdentified": string[],
+  "recommendedDataSources": string[],
+  "estimatedDataCompleteness": number
+}`;
+
+      return await generateGroqStructured(prompt, 'Return valid diagnostic questions JSON.');
+    } catch (err) {
+      console.error('[Groq] generateDiagnosticQuestions error, using heuristic:', err.message);
+    }
+  }
+
+  return {
+    diagnosticQuestions: [
+      { question: `Are there any unreported extenuating factors for this ${entityType}?`, rationale: 'Validates quantitative metric anomalies', priority: 'High', targetAudience: 'Department Advisor' }
+    ],
+    dataGapsIdentified: ['Historical engagement records'],
+    recommendedDataSources: ['Student Information System', 'LMS activity logs'],
+    estimatedDataCompleteness: 0.70
+  };
+}
+
+// ─── LEGACY FUNCTIONS ─────────────────────────────────────────────────────────
+
+export async function predictStudentRisk(studentData) {
+  return predictStudentPerformance({
+    studentId: studentData.id || 'unknown',
+    department: studentData.department || 'Computer Science',
+    program: studentData.program || 'Computer Science B.S.',
+    semester: studentData.semester || 4,
+    cgpa: studentData.current_gpa || 0,
+    attendancePct: studentData.attendance_rate || 0,
+    assessments: studentData.assessments || []
+  });
 }
 
 export async function runMultiAgentAdvisor({ message, agentType, studentContext, policyContext, chatHistory }) {
-  if (ai) {
+  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
     try {
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: `You are acting as the specialized AI Agent '${agentType}' for the University Academic Intelligence Platform.
-Student Context: ${JSON.stringify(studentContext || {})}
-Institutional Policy Relevant Context: ${JSON.stringify(policyContext || [])}
-Prior Chat History: ${JSON.stringify(chatHistory || [])}
-User Message: "${message}"
-
-Provide a clear, helpful, evidence-backed answer. If scheduling or emailing is requested, provide structured MCP action suggestions.`,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION
-        }
-      });
-
-      return {
-        text: response.text,
-        agent: agentType
-      };
+      const historyStr = (chatHistory || []).map(m => `${m.sender === 'user' ? 'User' : 'AI'}: ${m.message_text || m.text || ''}`).join('\n');
+      const fullPrompt = `${historyStr ? historyStr + '\n' : ''}User: ${message}\nAssistant:`;
+      const text = await generateGroqCompletion(fullPrompt);
+      return { text, agent: agentType };
     } catch (e) {
-      console.error('[Gemini API] Advisor Agent error, falling back:', e.message);
+      console.error('[Groq] runMultiAgentAdvisor error:', e.message);
     }
   }
-
-  // Smart Fallback generator tailored to agent types and user prompt
-  const pLower = (message || '').toLowerCase().trim();
-
-  let agentRoleName = 'Academic AI Advisor';
-  let adviceBody = '';
-
-  if (agentType === 'COURSE_PLANNER') {
-    agentRoleName = 'Course Planner Agent';
-    if (pLower.includes('prerequisite') || pLower.includes('prereq') || pLower.includes('dependency')) {
-      adviceBody = `To fulfill prerequisite requirements for your course pathway, complete foundational core modules with a minimum grade of C (2.00 GPA). Department policy requires passing lower-level dependencies prior to registering for capstone and 300/400-level electives.`;
-    } else if (pLower.includes('schedule') || pLower.includes('register') || pLower.includes('term') || pLower.includes('semester')) {
-      adviceBody = `For optimal academic balance, we recommend registering for 12-15 credit hours consisting of 2 core technical subjects and 2 lower-workload general electives.`;
-    } else {
-      adviceBody = `Based on degree audit guidelines, ensure your credit milestones align with departmental roadmap standards. Check course availability and registration windows in the student portal.`;
-    }
-  } else if (agentType === 'FINANCIAL_AID') {
-    agentRoleName = 'Financial Aid Policy Agent';
-    if (pLower.includes('sap') || pLower.includes('probation') || pLower.includes('warning')) {
-      adviceBody = `Satisfactory Academic Progress (SAP) under Federal Title IV criteria requires maintaining a cumulative GPA >= 2.00 and completing >= 67% of attempted credit hours. Failure to meet these metrics puts financial aid eligibility on Warning status.`;
-    } else if (pLower.includes('scholarship') || pLower.includes('grant') || pLower.includes('tuition')) {
-      adviceBody = `Institutional merit scholarships are evaluated at the close of each spring semester. Maintaining a 3.20+ GPA keeps institutional grant aid active.`;
-    } else {
-      adviceBody = `Financial aid distributions depend on full-time enrollment status (minimum 12 credit hours/term) and active course attendance.`;
-    }
-  } else if (agentType === 'CAREER_PATHWAY') {
-    agentRoleName = 'Career Pathway Agent';
-    if (pLower.includes('intern') || pLower.includes('job') || pLower.includes('work')) {
-      adviceBody = `Target departmental internship opportunities through the Career Center portal. Academic credit (up to 3 credits) can be awarded for approved industry roles.`;
-    } else if (pLower.includes('research') || pLower.includes('thesis') || pLower.includes('faculty')) {
-      adviceBody = `Undergraduate research positions are open to students with a 3.0+ GPA. Connect with department faculty leads to apply for lab assistantships.`;
-    } else {
-      adviceBody = `Align your coursework with industry certifications and update your LinkedIn profile for upcoming university campus recruitment fairs.`;
-    }
-  } else {
-    agentRoleName = 'General Academic Agent';
-    adviceBody = `Regarding your inquiry ("${message}"): Please review active university policy guidelines, consult your syllabus for milestone deadlines, and contact your assigned faculty mentor for customized academic support.`;
-  }
-
-  const responseText = `[${agentRoleName}]\nRegarding: "${message}"\n\n${adviceBody}\n\nWould you like me to schedule an advising appointment or generate an action plan for you?`;
-
-  return {
-    text: responseText,
-    agent: agentType
-  };
+  return { text: `Regarding your query "${message}": Please consult your department academic advisor for specific guidance.`, agent: agentType };
 }
 
 export async function generateExecutiveReport({ department, timeframe, reportType, departmentData }) {
-  if (ai) {
-    try {
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: `Generate a comprehensive ${reportType} report for Department: ${department}, Timeframe: ${timeframe}.
-Department Aggregate Data: ${JSON.stringify(departmentData)}`,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            properties: {
-              reportTitle: { type: 'STRING' },
-              executiveSummary: { type: 'STRING' },
-              keyStrengths: { type: 'ARRAY', items: { type: 'STRING' } },
-              areasOfConcern: { type: 'ARRAY', items: { type: 'STRING' } },
-              complianceStatus: { type: 'STRING' },
-              actionableRecommendations: { type: 'ARRAY', items: { type: 'STRING' } }
-            },
-            required: ['reportTitle', 'executiveSummary', 'keyStrengths', 'areasOfConcern', 'complianceStatus', 'actionableRecommendations']
-          }
-        }
-      });
-      return JSON.parse(response.text);
-    } catch (e) {
-      console.error('[Gemini API] Report generation fallback:', e.message);
-    }
-  }
-
-  return {
-    reportTitle: `${department} Department ${reportType} Audit (${timeframe})`,
-    executiveSummary: `The ${department} department demonstrated overall stability across the ${timeframe} academic evaluation period. Student retention rate stands at 89.4%, with active attendance metrics averaging 82.6%. Faculty workload distribution remains within accredited standards.`,
-    keyStrengths: [
-      `High faculty research output with average teaching rating of 4.7/5.0`,
-      `Curriculum outcomes alignment at 85% completion rate across core modules`,
-      `Active utilization of AI risk prediction tools for early student intervention`
-    ],
-    areasOfConcern: [
-      `First and second year drop-out risk elevated in high-density introductory STEM tracks`,
-      `Attendance warning triggers increased by 4.2% in Friday laboratory sessions`
-    ],
-    complianceStatus: 'FULLY COMPLIANT (Higher Learning Commission Standards)',
-    actionableRecommendations: [
-      `Implement mandatory Supplemental Instruction (SI) labs for courses with pass rates below 75%`,
-      `Rebalance faculty advising loads to cap maximum advisee ratio at 25:1`,
-      `Review prerequisite requirements for advanced departmental electives`
-    ]
-  };
+  return generateExecutiveAcademicReport({
+    universityName: 'University',
+    department,
+    academicTerm: timeframe,
+    reportType,
+    departmentData
+  });
 }
 
-/**
- * Service function to generate a dynamic AI answer for general user prompts.
- * Uses @google/genai SDK with model gemini-2.0-flash and includes conversation context.
- *
- * @param {string} userPrompt - User's typed question
- * @param {Array<{ sender: string, message_text: string }>} [conversationHistory] - Past chat messages
- * @returns {Promise<string>} Clean text response generated by Gemini AI
- */
 export async function generateAiAnswer(userPrompt, conversationHistory = []) {
-  const ASSISTANT_SYSTEM_INSTRUCTION = `You are an intelligent, empathetic, and expert AI Assistant. Provide accurate, clear, and actionable answers to the user's questions based on the prompt and context provided.`;
-
-  // Build context from past conversation history
-  let historyText = '';
-  if (conversationHistory && conversationHistory.length > 0) {
-    historyText = 'Past Conversation Context:\n' +
-      conversationHistory.map(msg => `${msg.sender === 'user' ? 'User' : 'Assistant'}: ${msg.message_text}`).join('\n') + '\n\n';
-  }
-
-  const fullPrompt = `${historyText}Current User Question: ${userPrompt}\n\nAI Assistant Response:`;
-
-  if (ai) {
+  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
     try {
-      console.log(`[Gemini Service] Generating dynamic AI response with ${GEMINI_MODEL}...`);
-      
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: fullPrompt,
-        config: {
-          systemInstruction: ASSISTANT_SYSTEM_INSTRUCTION
-        }
-      });
-
-      if (response && response.text) {
-        return response.text.trim();
-      }
+      const historyStr = (conversationHistory || []).map(m => `${m.sender === 'user' ? 'User' : 'Assistant'}: ${m.message_text}`).join('\n');
+      const prompt = `${historyStr ? historyStr + '\n' : ''}User: ${userPrompt}\nAssistant:`;
+      const text = await generateGroqCompletion(prompt);
+      return text;
     } catch (err) {
-      console.error('[Gemini Service Error] generateContent failed:', err.message);
-      console.log('[Gemini Service] Falling back to intelligent response generator...');
+      console.error('[Groq] generateAiAnswer error:', err.message);
     }
   }
 
-  // Fallback intelligent response generator for unconfigured key / offline mode
-  return fallbackAiAnswer(userPrompt);
+  return `Thank you for your question regarding "${userPrompt}". Please review course guidelines or check the Performance & Syllabus Tracker.`;
 }
-
-/**
- * Fallback response generator for unconfigured GEMINI_API_KEY / quota limit mode
- */
-function fallbackAiAnswer(prompt) {
-  const pLower = (prompt || '').toLowerCase().trim();
-
-  if (pLower.includes('hello') || pLower.includes('hi') || pLower.includes('hey')) {
-    return "Hello! I am your Google Gemini AI Assistant. How can I assist you with your academic goals, course questions, or university inquiries today?";
-  }
-
-  if (pLower.includes('gpa') || pLower.includes('grade') || pLower.includes('score') || pLower.includes('marks')) {
-    return `Regarding your GPA question ("${prompt}"):
-
-1. **GPA Calculation**: Grade points are weighted by course credit hours (A = 4.0, B = 3.0, C = 2.0, D = 1.0, F = 0.0).
-2. **Grade Replacement Policy**: Repeating an eligible course replaces the prior grade in cumulative GPA calculations.
-3. **Academic Standing**: Maintaining a GPA >= 2.00 is required to remain in good standing. Below 2.00 triggers an Academic Warning status.`;
-  }
-
-  if (pLower.includes('course') || pLower.includes('register') || pLower.includes('prereq') || pLower.includes('major')) {
-    return `Regarding your course inquiry ("${prompt}"):
-
-1. **Registration**: Check prerequisite completion in your student degree audit before enrolling.
-2. **Workload Balance**: Combine 2 technical/quantitative subjects with 2 general education electives per term.
-3. **Department Consultation**: Contact your academic advisor if you need a prerequisite waiver or transfer credit evaluation.`;
-  }
-
-  if (pLower.includes('financial') || pLower.includes('aid') || pLower.includes('scholarship') || pLower.includes('tuition')) {
-    return `Regarding your financial aid question ("${prompt}"):
-
-1. **SAP Criteria**: Federal aid requires completing at least 67% of attempted credits with a cumulative GPA of at least 2.00.
-2. **Disbursements**: Funds are released following verification of course attendance during the census period.
-3. **Support**: Contact the Financial Aid Office or visit your student billing portal for personalized assistance.`;
-  }
-
-  if (pLower.includes('drop') || pLower.includes('add') || pLower.includes('withdraw') || pLower.includes('deadline')) {
-    return `Regarding your drop/add deadline question ("${prompt}"):
-
-1. **Add/Drop Window**: Courses dropped within the first 14 days of the semester do not appear on your official transcript and receive a 100% tuition credit refund.
-2. **Course Withdrawal ('W' Grade)**: Withdrawing after Week 2 through Week 10 results in a grade of 'W'. This does not affect cumulative GPA, but counts as attempted credits for SAP completion rate.
-3. **Important Deadlines**: Check your academic calendar in the student portal under **Registrar > Deadlines** to verify key dates.`;
-  }
-
-  if (pLower.includes('study') || pLower.includes('exam') || pLower.includes('test') || pLower.includes('time')) {
-    return `Regarding your study and exam preparation question ("${prompt}"):
-
-1. **Spaced Repetition & Active Recall**: Review material in 45-minute blocks rather than marathon cramming sessions.
-2. **Faculty Office Hours**: Visit your instructor or TA office hours to clarify difficult concepts prior to exam week.
-3. **Peer Tutoring**: Access free campus tutoring sessions for foundational STEM and humanities courses.`;
-  }
-
-  return `Thank you for your question: "${prompt}".
-
-As your Google Gemini AI Assistant, here is guidance regarding your inquiry:
-- **Overview**: Your query directly touches on academic performance and institutional procedures.
-- **Recommended Action**: Review relevant course syllabi and institutional handbook guidelines in the portal, or consult your advisor for tailored recommendations.
-- **Follow-up**: Please let me know if you would like specific steps or policy references regarding "${prompt}".`;
-}
-

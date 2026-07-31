@@ -65,6 +65,8 @@ export const mockStore = {
       full_name: 'Alex Rivera',
       email: 'alex.rivera@student.university.edu',
       department: 'Computer Science',
+      program: 'B.Tech Computer Science',
+      semester: 5,
       enrollment_year: 2023,
       current_gpa: 2.34,
       attendance_rate: 68.5,
@@ -86,6 +88,8 @@ export const mockStore = {
       full_name: 'Sophia Montgomery',
       email: 'sophia.m@student.university.edu',
       department: 'Business Administration',
+      program: 'B.Sc Business Administration',
+      semester: 7,
       enrollment_year: 2022,
       current_gpa: 3.88,
       attendance_rate: 96.2,
@@ -93,7 +97,7 @@ export const mockStore = {
       credits_required: 120,
       predicted_risk: 'LOW',
       status: 'ACTIVE',
-      advisor_notes: 'High performer. Candidate for Dean’s Honor List and Honors Thesis.',
+      advisor_notes: 'High performer. Candidate for Dean\'s Honor List and Honors Thesis.',
       gpa_history: [
         { term: 'Fall 2022', gpa: 3.80 },
         { term: 'Spring 2023', gpa: 3.90 },
@@ -108,6 +112,8 @@ export const mockStore = {
       full_name: 'Liam Vance',
       email: 'liam.vance@student.university.edu',
       department: 'Mechanical Engineering',
+      program: 'B.Tech Mechanical Engineering',
+      semester: 5,
       enrollment_year: 2023,
       current_gpa: 2.85,
       attendance_rate: 76.0,
@@ -128,6 +134,8 @@ export const mockStore = {
       full_name: 'Maya Patel',
       email: 'maya.patel@student.university.edu',
       department: 'Life Sciences',
+      program: 'B.Sc Life Sciences',
+      semester: 3,
       enrollment_year: 2024,
       current_gpa: 3.65,
       attendance_rate: 94.0,
@@ -147,6 +155,8 @@ export const mockStore = {
       full_name: 'Ethan Blackwood',
       email: 'ethan.b@student.university.edu',
       department: 'Humanities',
+      program: 'B.A Humanities',
+      semester: 7,
       enrollment_year: 2022,
       current_gpa: 2.15,
       attendance_rate: 62.0,
@@ -229,7 +239,10 @@ export const mockStore = {
       title: 'Data Structures & Algorithms',
       department: 'Computer Science',
       credits: 4,
+      semester: 3,
       syllabus_progress: 75.0,
+      total_modules: 12,
+      completed_modules: 9,
       prerequisites: ['CS101'],
       faculty_name: 'Prof. Marcus Chen',
       enrolled_count: 64,
@@ -246,7 +259,10 @@ export const mockStore = {
       title: 'Corporate Finance & Valuation',
       department: 'Business Administration',
       credits: 3,
+      semester: 5,
       syllabus_progress: 82.5,
+      total_modules: 10,
+      completed_modules: 8,
       prerequisites: ['BUS101'],
       faculty_name: 'Dr. Aris Thorne',
       enrolled_count: 88,
@@ -263,7 +279,10 @@ export const mockStore = {
       title: 'Engineering Thermodynamics',
       department: 'Mechanical Engineering',
       credits: 4,
+      semester: 3,
       syllabus_progress: 68.0,
+      total_modules: 8,
+      completed_modules: 5,
       prerequisites: ['PHYS101', 'MATH201'],
       faculty_name: 'Dr. Elena Rostova',
       enrolled_count: 52,
@@ -279,7 +298,10 @@ export const mockStore = {
       title: 'Genetics & Genomics',
       department: 'Life Sciences',
       credits: 4,
+      semester: 3,
       syllabus_progress: 90.0,
+      total_modules: 10,
+      completed_modules: 9,
       prerequisites: ['BIO101'],
       faculty_name: 'Dr. Samuel Vance',
       enrolled_count: 75,
@@ -292,10 +314,16 @@ export const mockStore = {
   ],
 
   attendance_logs: [
-    { id: 'att-1', course_code: 'CS201', student_name: 'Alex Rivera', date: '2026-07-28', status: 'ABSENT', department: 'Computer Science' },
-    { id: 'att-2', course_code: 'CS201', student_name: 'Sophia Montgomery', date: '2026-07-28', status: 'PRESENT', department: 'Business Administration' },
-    { id: 'att-3', course_code: 'ME202', student_name: 'Liam Vance', date: '2026-07-27', status: 'LATE', department: 'Mechanical Engineering' },
-    { id: 'att-4', course_code: 'HUM101', student_name: 'Ethan Blackwood', date: '2026-07-27', status: 'ABSENT', department: 'Humanities' }
+    { id: 'att-1', course_code: 'CS201', course_id: 'crs-301', student_id: 'stu-101', student_name: 'Alex Rivera', date: '2026-07-28', status: 'ABSENT', department: 'Computer Science' },
+    { id: 'att-2', course_code: 'CS201', course_id: 'crs-301', student_id: 'stu-102', student_name: 'Sophia Montgomery', date: '2026-07-28', status: 'PRESENT', department: 'Business Administration' },
+    { id: 'att-3', course_code: 'ME202', course_id: 'crs-303', student_id: 'stu-103', student_name: 'Liam Vance', date: '2026-07-27', status: 'LATE', department: 'Mechanical Engineering' },
+    { id: 'att-4', course_code: 'HUM101', course_id: null, student_id: 'stu-105', student_name: 'Ethan Blackwood', date: '2026-07-27', status: 'ABSENT', department: 'Humanities' }
+  ],
+
+  assessments: [
+    { id: 'asmt-1', student_id: 'stu-101', course_id: 'crs-301', title: 'Midterm Exam', score_obtained: 52, max_score: 100, weightage_percent: 30, recorded_by: 'prof-002', created_at: new Date(Date.now() - 86400000 * 10).toISOString() },
+    { id: 'asmt-2', student_id: 'stu-102', course_id: 'crs-302', title: 'Midterm Exam', score_obtained: 91, max_score: 100, weightage_percent: 30, recorded_by: 'prof-003', created_at: new Date(Date.now() - 86400000 * 10).toISOString() },
+    { id: 'asmt-3', student_id: 'stu-103', course_id: 'crs-303', title: 'Lab Assignment 1', score_obtained: 74, max_score: 100, weightage_percent: 15, recorded_by: 'prof-002', created_at: new Date(Date.now() - 86400000 * 5).toISOString() }
   ],
 
   policies: [
@@ -349,12 +377,92 @@ export const mockStore = {
     }
   ],
 
+  // ─── AI REPORTS STORE ────────────────────────────────────────────────────
+  ai_academic_reports: [
+    {
+      id: 'rpt-701',
+      university_id: 'uni-001',
+      department: 'Computer Science',
+      generated_by: 'prof-001',
+      report_type: 'Prediction',
+      raw_input_payload: { studentId: 'stu-101', department: 'Computer Science', program: 'B.Tech CS', semester: 5, cgpa: 2.34, attendancePct: 68.5, assessments: [] },
+      ai_response: {
+        predictedCGPA: 2.10,
+        riskLevel: 'Critical',
+        dropoutProbability: 0.38,
+        keyRiskFactors: ['Attendance below 70%', 'GPA declining over 3 semesters', 'Midterm score 52%'],
+        strengths: ['Peer engagement in lab sessions', 'Completed all prerequisite courses'],
+        possibleRootCauses: ['Possible external socioeconomic pressures', 'Course load imbalance'],
+        confidenceScore: 0.85,
+        assumptions: ['Historical GPA trajectory extrapolated linearly', 'No major life event documented']
+      },
+      assumptions: ['Historical GPA trajectory extrapolated linearly', 'No major life event documented'],
+      confidence_score: 0.85,
+      is_verified_by_admin: false,
+      verified_by: null,
+      created_at: new Date(Date.now() - 86400000 * 3).toISOString()
+    }
+  ],
+
+  // ─── AUDIT LOGS STORE ─────────────────────────────────────────────────────
+  audit_logs: [
+    {
+      id: 'aud-001',
+      actor_id: 'prof-001',
+      actor_name: 'Dr. Eleanor Harrison',
+      action: 'LOGIN',
+      target_entity: 'auth',
+      details: { email: 'dean.harrison@university.edu' },
+      ip_address: '127.0.0.1',
+      created_at: new Date(Date.now() - 86400000 * 1).toISOString()
+    },
+    {
+      id: 'aud-002',
+      actor_id: 'prof-002',
+      actor_name: 'Prof. Marcus Chen',
+      action: 'ATTENDANCE_RECORDED',
+      target_entity: 'attendance_records',
+      details: { course_code: 'CS201', date: '2026-07-28', count: 4 },
+      ip_address: '127.0.0.1',
+      created_at: new Date(Date.now() - 86400000 * 1).toISOString()
+    },
+    {
+      id: 'aud-003',
+      actor_id: 'prof-001',
+      actor_name: 'Dr. Eleanor Harrison',
+      action: 'AI_REPORT_GENERATED',
+      target_entity: 'ai_academic_reports',
+      details: { report_type: 'Prediction', department: 'Computer Science' },
+      ip_address: '127.0.0.1',
+      created_at: new Date(Date.now() - 86400000 * 3).toISOString()
+    }
+  ],
+
   ai_generated_advisories: [],
   advisor_chats: [],
   advisor_messages: [],
   ai_sessions: [],
-  ai_chat_messages: []
+  ai_chat_messages: [],
+
+  // ─── PERFORMANCE & SYLLABUS TRACKER STORES ─────────────────────────────
+  student_attendance: [
+    { id: 'att-101', student_id: 'stu-101', course_id: 'crs-001', status: 'Present', date: '2026-07-25' },
+    { id: 'att-102', student_id: 'stu-101', course_id: 'crs-001', status: 'Present', date: '2026-07-26' },
+    { id: 'att-103', student_id: 'stu-101', course_id: 'crs-001', status: 'Absent', date: '2026-07-27' },
+    { id: 'att-104', student_id: 'stu-101', course_id: 'crs-001', status: 'Present', date: '2026-07-28' },
+    { id: 'att-105', student_id: 'stu-101', course_id: 'crs-002', status: 'Present', date: '2026-07-25' },
+    { id: 'att-106', student_id: 'stu-101', course_id: 'crs-002', status: 'Absent', date: '2026-07-26' },
+    { id: 'att-107', student_id: 'stu-101', course_id: 'crs-002', status: 'Present', date: '2026-07-27' },
+    { id: 'att-108', student_id: 'stu-101', course_id: 'crs-002', status: 'Present', date: '2026-07-28' }
+  ],
+
+  course_syllabus: [
+    { id: 'syl-001', course_id: 'crs-001', faculty_id: 'prof-002', unit_title: 'Unit 1: Data Structures Overview & Arrays', topics_covered: 'Arrays, Dynamic Memory, Multi-dimensional Arrays', completion_percentage: 100, status: 'Completed' },
+    { id: 'syl-002', course_id: 'crs-001', faculty_id: 'prof-002', unit_title: 'Unit 2: Stacks, Queues & Linked Lists', topics_covered: 'Singly Linked Lists, Doubly Linked Lists, Circular Queues', completion_percentage: 85, status: 'In Progress' },
+    { id: 'syl-003', course_id: 'crs-001', faculty_id: 'prof-002', unit_title: 'Unit 3: Trees, Binary Search Trees & Heaps', topics_covered: 'Tree Traversals, AVL Trees, Binary Heaps', completion_percentage: 40, status: 'In Progress' },
+    { id: 'syl-004', course_id: 'crs-001', faculty_id: 'prof-002', unit_title: 'Unit 4: Graph Algorithms & Shortest Path', topics_covered: 'BFS, DFS, Dijkstra Algorithm, Bellman-Ford', completion_percentage: 0, status: 'Pending' },
+    { id: 'syl-005', course_id: 'crs-002', faculty_id: 'prof-002', unit_title: 'Unit 1: Database System Concepts', topics_covered: 'Relational Model, ER Modeling, Relational Algebra', completion_percentage: 100, status: 'Completed' },
+    { id: 'syl-006', course_id: 'crs-002', faculty_id: 'prof-002', unit_title: 'Unit 2: SQL Fundamentals & Normalization', topics_covered: 'DDL, DML, Joins, 1NF, 2NF, 3NF, BCNF', completion_percentage: 75, status: 'In Progress' },
+    { id: 'syl-007', course_id: 'crs-002', faculty_id: 'prof-002', unit_title: 'Unit 3: Transaction Management & Concurrency', topics_covered: 'ACID Properties, Locking Protocols, Two-Phase Commit', completion_percentage: 10, status: 'In Progress' }
+  ]
 };
-
-
-
