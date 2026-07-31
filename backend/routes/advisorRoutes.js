@@ -7,7 +7,7 @@ import {
 
 const router = express.Router();
 
-// Main advisor chat endpoint as requested
+// Main advisor chat endpoint
 router.post('/chat', handleAdvisorChat);
 
 // History and session retrieval endpoints
