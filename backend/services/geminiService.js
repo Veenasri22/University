@@ -29,7 +29,9 @@ async function generateGroqCompletion(prompt, systemInstruction = ADVISOR_SYSTEM
     temperature: 0.3
   });
 
-  return response.choices[0]?.message?.content?.trim() || '';
+  let content = response.choices[0]?.message?.content?.trim() || '';
+  content = content.replace(/<Think>[\s\S]*?<\/Think>/gi, '').trim();
+  return content;
 }
 
 async function generateGroqStructured(prompt, schemaInstruction, systemInstruction = ACADEMIC_INTELLIGENCE_SYSTEM) {
