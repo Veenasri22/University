@@ -25,22 +25,27 @@ export const generateGroqResponse = async (userQuestion, conversationHistory = [
 
   console.log(`[Advisor Service] Sending request to Groq API (${GROQ_MODEL || 'llama-3.3-70b-versatile'})...`);
 
-  // 2. Direct API call to Groq
-  const response = await groq.chat.completions.create({
-    model: GROQ_MODEL || 'llama-3.3-70b-versatile',
-    messages,
-    temperature: 0.3,
-    max_tokens: 1000
-  });
+  try {
+    const response = await groq.chat.completions.create({
+      model: GROQ_MODEL || 'qwen/qwen3.6-27b',
+      messages,
+      temperature: 0.3,
+      max_tokens: 1000
+    });
 
-  const aiOutput = response?.choices?.[0]?.message?.content;
+    let aiOutput = response?.choices?.[0]?.message?.content || '';
+    aiOutput = aiOutput.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
-  if (!aiOutput) {
-    throw new Error('Groq API returned an empty response.');
+    if (!aiOutput) {
+      return "I'm here to assist with your academic journey. Could you please rephrase your question?";
+    }
+
+    console.log('[Advisor Service] Live response generated successfully from Groq!');
+    return aiOutput;
+  } catch (err) {
+    console.error('[Advisor Service Error]', err.message);
+    return `Regarding "${userQuestion}": Thank you for your inquiry. Please consult with your department academic advisor for specific guidance or check the university course catalog for degree requirements.`;
   }
-
-  console.log('[Advisor Service] Live response generated successfully from Groq!');
-  return aiOutput.trim();
 };
 
 // Aliases so existing controller imports don't break
