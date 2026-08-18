@@ -20,9 +20,14 @@ import {
 } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from 'recharts';
 
+import { useAuth } from '../context/AuthContext.jsx';
+
 export const StudentDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const role = (user?.role || '').toUpperCase();
+  const isDean = role === 'DEAN' || role === 'SUPER_ADMIN';
 
   const [student, setStudent] = useState(null);
   const [advisoryLogs, setAdvisoryLogs] = useState([]);
@@ -156,12 +161,15 @@ export const StudentDetail = () => {
               <Brain className="w-4 h-4" />
               {predicting ? 'Computing Gemini AI Trajectory...' : 'Run Gemini Risk Evaluation'}
             </button>
-            <button
-              onClick={() => setIsEditOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 transition-all"
-            >
-              Update Performance Metrics
-            </button>
+
+            {isDean && (
+              <button
+                onClick={() => setIsEditOpen(true)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 transition-all"
+              >
+                Update Performance Metrics
+              </button>
+            )}
           </div>
         </div>
       </div>

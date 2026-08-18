@@ -14,7 +14,13 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
+import { useAuth } from '../context/AuthContext.jsx';
+
 export const Faculty = () => {
+  const { user } = useAuth();
+  const role = (user?.role || '').toUpperCase();
+  const isDean = role === 'DEAN' || role === 'SUPER_ADMIN';
+
   const [faculty, setFaculty] = useState([]);
   const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -124,13 +130,15 @@ export const Faculty = () => {
             <option value="Life Sciences">Life Sciences</option>
           </select>
 
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center gap-2 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            Add Faculty
-          </button>
+          {isDean && (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center gap-2 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              Add Faculty
+            </button>
+          )}
         </div>
       </div>
 

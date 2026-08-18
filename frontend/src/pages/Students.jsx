@@ -15,7 +15,13 @@ import {
   Brain
 } from 'lucide-react';
 
+import { useAuth } from '../context/AuthContext.jsx';
+
 export const Students = () => {
+  const { user } = useAuth();
+  const role = (user?.role || '').toUpperCase();
+  const isDean = role === 'DEAN' || role === 'SUPER_ADMIN';
+
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -85,13 +91,15 @@ export const Students = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          Enroll New Student
-        </button>
+        {isDean && (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Enroll New Student
+          </button>
+        )}
       </div>
 
       {/* Filters Bar */}

@@ -12,7 +12,14 @@ import {
   ChevronRight
 } from 'lucide-react';
 
+import { useAuth } from '../context/AuthContext.jsx';
+
 export const Curriculum = () => {
+  const { user } = useAuth();
+  const role = (user?.role || '').toUpperCase();
+  const isDean = role === 'DEAN' || role === 'SUPER_ADMIN';
+  const canEditProgress = isDean || role === 'FACULTY';
+
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -63,6 +70,7 @@ export const Curriculum = () => {
   };
 
   const handleToggleOutcome = async (courseId, index) => {
+    if (!canEditProgress) return;
     try {
       await api.patch(`/courses/${courseId}/progress`, { outcome_index: index });
       fetchCourses();
@@ -72,6 +80,7 @@ export const Curriculum = () => {
   };
 
   const handleUpdateProgress = async (courseId, newProgress) => {
+    if (!canEditProgress) return;
     try {
       await api.patch(`/courses/${courseId}/progress`, { syllabus_progress: newProgress });
       fetchCourses();
@@ -94,13 +103,15 @@ export const Curriculum = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          Add New Course
-        </button>
+        {isDean && (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Add New Course
+          </button>
+        )}
       </div>
 
       {/* Courses Grid */}
@@ -111,7 +122,7 @@ export const Curriculum = () => {
           <div className="col-span-2 text-center text-slate-400 text-xs py-12 bg-slate-900/40 rounded-3xl border border-slate-800 p-8">
             <BookOpen className="w-10 h-10 text-slate-600 mx-auto mb-2" />
             <p className="font-bold text-white mb-1">No curriculum courses added yet</p>
-            <p className="text-slate-400">Click "Add New Course" above to create your course offering in Supabase.</p>
+            <p className="text-slate-400">{isDean ? 'Click "Add New Course" above to create your course offering in Supabase.' : 'No courses have been added to the institution curriculum yet.'}</p>
           </div>
         ) : (
           courses.map((course) => (
@@ -141,12 +152,14 @@ export const Curriculum = () => {
                 </div>
                 <div className="flex justify-between items-center text-[10px] text-slate-400 pt-1">
                   <span>Prerequisites: {course.prerequisites?.join(', ') || 'None'}</span>
-                  <button
-                    onClick={() => handleUpdateProgress(course.id, Math.min(100, course.syllabus_progress + 10))}
-                    className="text-blue-400 font-bold hover:underline"
-                  >
-                    +10% Progress Step
-                  </button>
+                  {canEditProgress && (
+                    <button
+                      onClick={() => handleUpdateProgress(course.id, Math.min(100, course.syllabus_progress + 10))}
+                      className="text-blue-400 font-bold hover:underline"
+                    >
+                      +10% Progress Step
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -157,8 +170,10 @@ export const Curriculum = () => {
                   {course.learning_outcomes?.map((lo, idx) => (
                     <div
                       key={idx}
-                      onClick={() => handleToggleOutcome(course.id, idx)}
-                      className={`flex items-center justify-between p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
+                      onClick={() => canEditProgress && handleToggleOutcome(course.id, idx)}
+                      className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${
+                        canEditProgress ? 'cursor-pointer' : 'cursor-default'
+                      } ${
                         lo.completed
                           ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
                           : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'

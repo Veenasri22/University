@@ -156,30 +156,32 @@ export const TrackerPage = () => {
 
         {/* Action Controls: Role Switcher & Refresh */}
         <div className="flex items-center gap-3">
-          <div className="bg-slate-900/90 border border-slate-800 p-1 rounded-xl flex items-center shadow-inner">
-            <button
-              onClick={() => setActiveRole('STUDENT')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeRole === 'STUDENT'
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <GraduationCap className="w-3.5 h-3.5" />
-              Student View
-            </button>
-            <button
-              onClick={() => setActiveRole('FACULTY')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeRole === 'FACULTY'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              Faculty View
-            </button>
-          </div>
+          {(!user?.role || user.role.toUpperCase() !== 'STUDENT') && (
+            <div className="bg-slate-900/90 border border-slate-800 p-1 rounded-xl flex items-center shadow-inner">
+              <button
+                onClick={() => setActiveRole('STUDENT')}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  activeRole === 'STUDENT'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <GraduationCap className="w-3.5 h-3.5" />
+                Student View
+              </button>
+              <button
+                onClick={() => setActiveRole('FACULTY')}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  activeRole === 'FACULTY'
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <UserCheck className="w-3.5 h-3.5" />
+                Faculty / Dean View
+              </button>
+            </div>
+          )}
 
           <button
             onClick={handleRefresh}

@@ -74,18 +74,7 @@ export const Attendance = () => {
          l.email === user?.email
   );
 
-  // Fallback logs for logged in student if no server entries exist yet
-  const displayLogs = isStudent
-    ? (studentLogs.length > 0
-        ? studentLogs
-        : [
-            { id: `att-my-1`, course_code: 'CS201', student_name: studentName, date: '2026-08-16', status: 'PRESENT', department: studentDept },
-            { id: `att-my-2`, course_code: 'CS301', student_name: studentName, date: '2026-08-14', status: 'PRESENT', department: studentDept },
-            { id: `att-my-3`, course_code: 'CS201', student_name: studentName, date: '2026-08-11', status: 'ABSENT',  department: studentDept },
-            { id: `att-my-4`, course_code: 'MATH201', student_name: studentName, date: '2026-08-08', status: 'PRESENT', department: studentDept },
-            { id: `att-my-5`, course_code: 'CS101', student_name: studentName, date: '2026-08-05', status: 'PRESENT', department: studentDept },
-          ])
-    : logs;
+  const displayLogs = isStudent ? studentLogs : logs;
 
   // Filter threshold alerts for logged-in student
   const studentAlerts = isStudent
