@@ -6,6 +6,8 @@ import {
   GraduationCap,
   BookOpen,
   CalendarCheck,
+  Building2,
+  Award,
   Bot,
   FileSearch,
   FileText,
@@ -35,8 +37,11 @@ const NAV_SECTIONS = [
   {
     label: 'Academic Management',
     items: [
+      { label: 'Departments',          path: '/departments',icon: Building2,     roles: ALL_ROLES },
       { label: 'Student Directory',    path: '/students',   icon: Users,         roles: FACULTY_UP },
-      { label: 'Faculty & Subjects',   path: '/faculty',    icon: GraduationCap, roles: ALL_ROLES },
+      { label: 'Faculty Directory',    path: '/faculty',    icon: GraduationCap, roles: ALL_ROLES },
+      { label: 'Subjects & Units',     path: '/subjects',   icon: BookOpen,      roles: ALL_ROLES },
+      { label: 'Marks & Backlogs',     path: '/marks',      icon: Award,         roles: ALL_ROLES },
       { label: 'Curriculum & Syllabi', path: '/curriculum', icon: BookOpen,     roles: ALL_ROLES },
       { label: 'Attendance Logs',      path: '/attendance', icon: CalendarCheck, roles: ALL_ROLES },
     ]

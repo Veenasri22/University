@@ -3,6 +3,7 @@ import { Bell, Sun, Moon, LogOut, Shield, Search } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useTheme } from '../../context/ThemeContext.jsx';
 import { useNavigate } from 'react-router-dom';
+import { NotificationsPopover } from '../NotificationsPopover.jsx';
 
 export const Navbar = () => {
   const { user, logout } = useAuth();
@@ -47,12 +48,8 @@ export const Navbar = () => {
           {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
 
-        {/* Notifications */}
-        <button className="relative p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
-          <Bell className="w-4 h-4" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500"></span>
-        </button>
+        {/* Notifications Popover */}
+        <NotificationsPopover />
 
         {/* Logout */}
         <button

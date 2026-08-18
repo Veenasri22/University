@@ -17,7 +17,9 @@ import { PolicyRAG }    from './pages/PolicyRAG.jsx';
 import { Reports }      from './pages/Reports.jsx';
 import { Profile }      from './pages/Profile.jsx';
 import { InsightsPage } from './pages/InsightsPage.jsx';
-import TrackerPage      from './pages/TrackerPage.jsx';
+import { Departments }   from './pages/Departments.jsx';
+import { Subjects }      from './pages/Subjects.jsx';
+import { Marks }         from './pages/Marks.jsx';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -59,7 +61,10 @@ export default function App() {
       <Route path="/tracker"        element={<ProtectedRoute><TrackerPage /></ProtectedRoute>} />
 
       {/* Protected — Academic Management */}
-      <Route path="/students"       element={<ProtectedRoute><Students /></ProtectedRoute>} />
+      <Route path="/departments" element={<ProtectedRoute><Departments /></ProtectedRoute>} />
+      <Route path="/subjects"    element={<ProtectedRoute><Subjects /></ProtectedRoute>} />
+      <Route path="/marks"       element={<ProtectedRoute><Marks /></ProtectedRoute>} />
+      <Route path="/students"    element={<ProtectedRoute><Students /></ProtectedRoute>} />
       <Route path="/students/:id"   element={<ProtectedRoute><StudentDetail /></ProtectedRoute>} />
       <Route path="/faculty"        element={<ProtectedRoute><Faculty /></ProtectedRoute>} />
       <Route path="/curriculum"     element={<ProtectedRoute><Curriculum /></ProtectedRoute>} />

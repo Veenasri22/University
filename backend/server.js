@@ -12,6 +12,10 @@ import aiRoutes from './routes/aiRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
 import advisorRoutes from './routes/advisorRoutes.js';
 import trackerRoutes from './routes/trackerRoutes.js';
+import departmentRoutes from './routes/departmentRoutes.js';
+import subjectRoutes from './routes/subjectRoutes.js';
+import markRoutes from './routes/markRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 
 import { apiLimiter } from './middleware/rateLimiter.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -56,6 +60,10 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/advisor', advisorRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/tracker', trackerRoutes);
+app.use('/api/departments', departmentRoutes);
+app.use('/api/subjects', subjectRoutes);
+app.use('/api/marks', markRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Centralized Error Handling
 app.use(errorHandler);
