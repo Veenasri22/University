@@ -17,9 +17,10 @@ import { PolicyRAG }    from './pages/PolicyRAG.jsx';
 import { Reports }      from './pages/Reports.jsx';
 import { Profile }      from './pages/Profile.jsx';
 import { InsightsPage } from './pages/InsightsPage.jsx';
-import { Departments }   from './pages/Departments.jsx';
-import { Subjects }      from './pages/Subjects.jsx';
-import { Marks }         from './pages/Marks.jsx';
+import { TrackerPage }  from './pages/TrackerPage.jsx';
+import { Departments }  from './pages/Departments.jsx';
+import { Subjects }     from './pages/Subjects.jsx';
+import { Marks }        from './pages/Marks.jsx';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
