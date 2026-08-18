@@ -4,8 +4,8 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { Sparkles, Shield, Lock, Mail, ArrowRight } from 'lucide-react';
 
 export const Login = () => {
-  const [email, setEmail] = useState('dean.harrison@university.edu');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('admin@university.edu');
+  const [password, setPassword] = useState('Admin@12345');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -26,9 +26,19 @@ export const Login = () => {
     }
   };
 
-  const handleDemoRole = (demoEmail) => {
+  const handleDemoRole = async (demoEmail) => {
     setEmail(demoEmail);
-    setPassword('password123');
+    setPassword('Admin@12345');
+    setError('');
+    setLoading(true);
+    try {
+      await login(demoEmail, 'Admin@12345');
+      navigate('/dashboard');
+    } catch (err) {
+      setError('Fast login failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -105,28 +115,28 @@ export const Login = () => {
           </p>
           <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={() => handleDemoRole('dean.harrison@university.edu')}
+              onClick={() => handleDemoRole('admin@university.edu')}
               className="px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-blue-600/20 text-slate-300 hover:text-blue-300 text-[11px] font-semibold border border-slate-700 text-left transition-colors truncate"
             >
-              👑 Dean Harrison
+              👑 Admin Chancellor
+            </button>
+            <button
+              onClick={() => handleDemoRole('hod.cse@university.edu')}
+              className="px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-blue-600/20 text-slate-300 hover:text-blue-300 text-[11px] font-semibold border border-slate-700 text-left transition-colors truncate"
+            >
+              🏛️ HOD Dr. Harrison
             </button>
             <button
               onClick={() => handleDemoRole('prof.chen@university.edu')}
               className="px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-blue-600/20 text-slate-300 hover:text-blue-300 text-[11px] font-semibold border border-slate-700 text-left transition-colors truncate"
             >
-              🎓 Prof. Chen
-            </button>
-            <button
-              onClick={() => handleDemoRole('advisor.sarah@university.edu')}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-blue-600/20 text-slate-300 hover:text-blue-300 text-[11px] font-semibold border border-slate-700 text-left transition-colors truncate"
-            >
-              💼 Advisor Sarah
+              🎓 Prof. Marcus Chen
             </button>
             <button
               onClick={() => handleDemoRole('alex.rivera@student.university.edu')}
               className="px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-blue-600/20 text-slate-300 hover:text-blue-300 text-[11px] font-semibold border border-slate-700 text-left transition-colors truncate"
             >
-              📚 Student Alex
+              📚 Student Alex Rivera
             </button>
           </div>
         </div>
