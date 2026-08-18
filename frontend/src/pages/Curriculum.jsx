@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api.js';
+import { Modal } from '../components/common/Modal.jsx';
 import {
   BookOpen,
   CheckCircle,
   Clock,
   Layers,
   Sparkles,
+  Plus,
   Award,
   ChevronRight
 } from 'lucide-react';
@@ -13,6 +15,17 @@ import {
 export const Curriculum = () => {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Modal State for New Course
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newCourse, setNewCourse] = useState({
+    course_code: '',
+    title: '',
+    department: 'Computer Science',
+    credits: 3,
+    prerequisites: '',
+    learning_outcomes: 'Master core principles, Complete practical project'
+  });
 
   const fetchCourses = async () => {
     try {
@@ -29,6 +42,25 @@ export const Curriculum = () => {
   useEffect(() => {
     fetchCourses();
   }, []);
+
+  const handleCreateCourse = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post('/courses', newCourse);
+      setIsModalOpen(false);
+      setNewCourse({
+        course_code: '',
+        title: '',
+        department: 'Computer Science',
+        credits: 3,
+        prerequisites: '',
+        learning_outcomes: 'Master core principles, Complete practical project'
+      });
+      fetchCourses();
+    } catch (err) {
+      alert(err.message || 'Error creating course');
+    }
+  };
 
   const handleToggleOutcome = async (courseId, index) => {
     try {
@@ -51,20 +83,36 @@ export const Curriculum = () => {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-extrabold text-white font-outfit tracking-tight flex items-center gap-2">
-          <BookOpen className="w-6 h-6 text-blue-500" />
-          Curriculum Progression & Learning Outcomes
-        </h1>
-        <p className="text-xs text-slate-400 mt-0.5">
-          Track syllabus milestone completion, prerequisite structures, and student outcome masteries.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold text-white font-outfit tracking-tight flex items-center gap-2">
+            <BookOpen className="w-6 h-6 text-blue-500" />
+            Curriculum Progression & Learning Outcomes
+          </h1>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Track syllabus milestone completion, prerequisite structures, and student outcome masteries.
+          </p>
+        </div>
+
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all"
+        >
+          <Plus className="w-4 h-4" />
+          Add New Course
+        </button>
       </div>
 
       {/* Courses Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {loading ? (
           <div className="col-span-2 text-center text-slate-400 text-xs py-12">Loading curriculum mapping...</div>
+        ) : courses.length === 0 ? (
+          <div className="col-span-2 text-center text-slate-400 text-xs py-12 bg-slate-900/40 rounded-3xl border border-slate-800 p-8">
+            <BookOpen className="w-10 h-10 text-slate-600 mx-auto mb-2" />
+            <p className="font-bold text-white mb-1">No curriculum courses added yet</p>
+            <p className="text-slate-400">Click "Add New Course" above to create your course offering in Supabase.</p>
+          </div>
         ) : (
           courses.map((course) => (
             <div key={course.id} className="glass-panel rounded-3xl p-6 border border-slate-800 space-y-4">
@@ -74,7 +122,7 @@ export const Curriculum = () => {
                     {course.course_code} • {course.credits} Credits
                   </span>
                   <h3 className="text-base font-bold text-white mt-2">{course.title}</h3>
-                  <p className="text-xs text-slate-400">{course.department} • Instructor: {course.faculty_name}</p>
+                  <p className="text-xs text-slate-400">{course.department} {course.faculty_name ? `• Instructor: ${course.faculty_name}` : ''}</p>
                 </div>
 
                 <div className="text-right">
@@ -129,6 +177,102 @@ export const Curriculum = () => {
           ))
         )}
       </div>
+
+      {/* Modal for Adding New Course */}
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Add New Curriculum Course">
+        <form onSubmit={handleCreateCourse} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">Course Code</label>
+              <input
+                type="text"
+                required
+                placeholder="CS201"
+                value={newCourse.course_code}
+                onChange={e => setNewCourse({ ...newCourse, course_code: e.target.value })}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 uppercase"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">Credits</label>
+              <input
+                type="number"
+                required
+                min="1"
+                max="10"
+                value={newCourse.credits}
+                onChange={e => setNewCourse({ ...newCourse, credits: Number(e.target.value) })}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-300 block mb-1">Course Title</label>
+            <input
+              type="text"
+              required
+              placeholder="Data Structures & Algorithms"
+              value={newCourse.title}
+              onChange={e => setNewCourse({ ...newCourse, title: e.target.value })}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-300 block mb-1">Department</label>
+            <select
+              value={newCourse.department}
+              onChange={e => setNewCourse({ ...newCourse, department: e.target.value })}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+            >
+              <option value="Computer Science">Computer Science</option>
+              <option value="Business Administration">Business Admin</option>
+              <option value="Mechanical Engineering">Mechanical Eng</option>
+              <option value="Life Sciences">Life Sciences</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-300 block mb-1">Prerequisites (Comma separated)</label>
+            <input
+              type="text"
+              placeholder="CS101, MATH101"
+              value={newCourse.prerequisites}
+              onChange={e => setNewCourse({ ...newCourse, prerequisites: e.target.value })}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-300 block mb-1">Learning Outcomes (Comma separated)</label>
+            <input
+              type="text"
+              placeholder="Implement binary search trees, Analyze asymptotic complexity"
+              value={newCourse.learning_outcomes}
+              onChange={e => setNewCourse({ ...newCourse, learning_outcomes: e.target.value })}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-3">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-600/30"
+            >
+              Save Course to Supabase
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

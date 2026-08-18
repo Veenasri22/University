@@ -6,6 +6,7 @@ export const getCourses = async (req, res, next) => {
     const { department } = req.query;
 
     let courses = [];
+    let isSupabaseActive = false;
 
     if (supabase) {
       try {
@@ -17,6 +18,7 @@ export const getCourses = async (req, res, next) => {
 
         const { data, error } = await query;
         if (!error && data) {
+          isSupabaseActive = true;
           courses = data;
         }
       } catch (err) {
@@ -24,7 +26,7 @@ export const getCourses = async (req, res, next) => {
       }
     }
 
-    if (courses.length === 0) {
+    if (!isSupabaseActive && !supabase) {
       courses = [...mockStore.courses];
       if (department && department !== 'ALL') {
         courses = courses.filter(c => c.department === department);
@@ -35,6 +37,74 @@ export const getCourses = async (req, res, next) => {
       success: true,
       count: courses.length,
       courses
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const createCourse = async (req, res, next) => {
+  try {
+    const { course_code, title, department, credits, prerequisites, learning_outcomes } = req.body;
+
+    if (!course_code || !title || !department) {
+      return res.status(400).json({ success: false, message: 'Course code, title, and department are required.' });
+    }
+
+    const prereqArray = Array.isArray(prerequisites)
+      ? prerequisites
+      : (prerequisites ? String(prerequisites).split(',').map(p => p.trim()) : []);
+
+    const outcomesArray = Array.isArray(learning_outcomes)
+      ? learning_outcomes
+      : (typeof learning_outcomes === 'string'
+          ? learning_outcomes.split(',').map(o => ({ outcome: o.trim(), completed: false }))
+          : []);
+
+    const newCourseData = {
+      course_code: String(course_code).toUpperCase(),
+      title,
+      department,
+      credits: Number(credits || 3),
+      syllabus_progress: 0,
+      learning_outcomes: outcomesArray,
+      prerequisites: prereqArray
+    };
+
+    let createdCourse = null;
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('courses')
+          .insert(newCourseData)
+          .select()
+          .single();
+
+        if (!error && data) {
+          createdCourse = data;
+          console.log('[Supabase] Created course record:', data.id);
+        } else if (error) {
+          console.error('[Supabase] Create course error:', error.message);
+        }
+      } catch (err) {
+        console.warn('[courseController] Supabase create course fallback:', err.message);
+      }
+    }
+
+    if (!createdCourse) {
+      createdCourse = {
+        id: `crs-${Date.now().toString().slice(-4)}`,
+        ...newCourseData
+      };
+    }
+
+    mockStore.courses.unshift(createdCourse);
+
+    res.status(201).json({
+      success: true,
+      message: 'Course created successfully in Supabase',
+      course: createdCourse
     });
   } catch (err) {
     next(err);

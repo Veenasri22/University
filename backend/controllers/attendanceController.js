@@ -8,6 +8,7 @@ export const getAttendanceLogs = async (req, res, next) => {
 
     let logs = [];
     let thresholdAlerts = [];
+    let isSupabaseActive = false;
 
     if (supabase) {
       try {
@@ -19,6 +20,7 @@ export const getAttendanceLogs = async (req, res, next) => {
 
         const { data, error } = await query;
         if (!error && data) {
+          isSupabaseActive = true;
           logs = data;
         }
 
@@ -31,7 +33,7 @@ export const getAttendanceLogs = async (req, res, next) => {
         if (atRiskStudents) {
           thresholdAlerts = atRiskStudents.map(s => ({
             student_id: s.id,
-            student_name: s.full_name,
+            student_name: s.full_name || s.student_code,
             student_code: s.student_code,
             department: s.department,
             attendance_rate: s.attendance_rate,
@@ -44,14 +46,11 @@ export const getAttendanceLogs = async (req, res, next) => {
       }
     }
 
-    if (logs.length === 0) {
+    if (!isSupabaseActive && !supabase) {
       logs = [...mockStore.attendance_logs];
       if (department && department !== 'ALL') {
         logs = logs.filter(l => l.department === department);
       }
-    }
-
-    if (thresholdAlerts.length === 0) {
       thresholdAlerts = mockStore.students
         .filter(s => s.attendance_rate < 75.0)
         .map(s => ({
@@ -128,7 +127,7 @@ export const logAttendance = async (req, res, next) => {
         const { data: student } = await supabase
           .from('students')
           .select('*')
-          .or(`id.eq.${student_id},full_name.eq.${student_name}`)
+          .or(`id.eq.${student_id},student_code.eq.${student_id}`)
           .maybeSingle();
 
         if (student) {
@@ -161,9 +160,9 @@ export const logAttendance = async (req, res, next) => {
 
           if (currentRate < 75.0) {
             mcpAlertSent = await dispatchGmailAlert({
-              recipientEmail: student.email || `${student.full_name.toLowerCase().replace(/\s+/g, '.')}@student.university.edu`,
+              recipientEmail: student.email || `${student_name.toLowerCase().replace(/\s+/g, '.')}@student.university.edu`,
               subject: `[URGENT] Academic Attendance Threshold Warning (<75%)`,
-              body: `Dear ${student.full_name}, Your cumulative attendance has fallen to ${currentRate}%. Under Policy 4.2, an immediate academic review is required.`,
+              body: `Dear ${student_name}, Your cumulative attendance has fallen to ${currentRate}%. Under Policy 4.2, an immediate academic review is required.`,
               alertType: 'ATTENDANCE_WARNING'
             });
           }

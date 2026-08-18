@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api.js';
+import { Modal } from '../components/common/Modal.jsx';
 import {
   GraduationCap,
   Award,
@@ -7,6 +8,7 @@ import {
   Brain,
   Sparkles,
   Search,
+  Plus,
   Filter,
   CheckCircle,
   AlertTriangle
@@ -18,6 +20,20 @@ export const Faculty = () => {
   const [loading, setLoading] = useState(true);
   const [department, setDepartment] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Modal State for New Faculty
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newFaculty, setNewFaculty] = useState({
+    full_name: '',
+    email: '',
+    department: 'Computer Science',
+    designation: 'Assistant Professor',
+    workload_hours: 20,
+    max_workload_hours: 40,
+    teaching_rating: 4.8,
+    research_publications: 3,
+    courses_taught: 'CS101, CS201'
+  });
 
   const fetchFacultyData = async () => {
     try {
@@ -38,6 +54,28 @@ export const Faculty = () => {
   useEffect(() => {
     fetchFacultyData();
   }, [department]);
+
+  const handleCreateFaculty = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post('/faculty', newFaculty);
+      setIsModalOpen(false);
+      setNewFaculty({
+        full_name: '',
+        email: '',
+        department: 'Computer Science',
+        designation: 'Assistant Professor',
+        workload_hours: 20,
+        max_workload_hours: 40,
+        teaching_rating: 4.8,
+        research_publications: 3,
+        courses_taught: 'CS101, CS201'
+      });
+      fetchFacultyData();
+    } catch (err) {
+      alert(err.message || 'Error creating faculty record');
+    }
+  };
 
   const filteredFaculty = faculty.filter(f => {
     if (!searchQuery) return true;
@@ -62,7 +100,7 @@ export const Faculty = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
@@ -85,6 +123,14 @@ export const Faculty = () => {
             <option value="Mechanical Engineering">Mechanical Eng</option>
             <option value="Life Sciences">Life Sciences</option>
           </select>
+
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center gap-2 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Add Faculty
+          </button>
         </div>
       </div>
 
@@ -111,7 +157,11 @@ export const Faculty = () => {
         {loading ? (
           <div className="col-span-2 text-center text-slate-400 text-xs py-12">Loading faculty roster...</div>
         ) : filteredFaculty.length === 0 ? (
-          <div className="col-span-2 text-center text-slate-400 text-xs py-12">No faculty members found matching "{searchQuery}".</div>
+          <div className="col-span-2 text-center text-slate-400 text-xs py-12 bg-slate-900/40 rounded-3xl border border-slate-800 p-8">
+            <GraduationCap className="w-10 h-10 text-slate-600 mx-auto mb-2" />
+            <p className="font-bold text-white mb-1">No faculty members registered yet</p>
+            <p className="text-slate-400">Click "Add Faculty" above to enroll your institutional faculty into Supabase.</p>
+          </div>
         ) : (
           filteredFaculty.map((f) => {
             const workloadPct = Math.min(100, Math.round((f.workload_hours / (f.max_workload_hours || 40)) * 100));
@@ -122,7 +172,7 @@ export const Faculty = () => {
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-blue-600 flex items-center justify-center font-bold text-white text-base">
-                      {f.full_name.substring(0, 2).toUpperCase()}
+                      {(f.full_name || 'FC').substring(0, 2).toUpperCase()}
                     </div>
                     <div>
                       <h3 className="text-base font-bold text-white">{f.full_name}</h3>
@@ -163,18 +213,119 @@ export const Faculty = () => {
                     ))}
                   </div>
                 </div>
-
-                {/* Evaluation Sentiment Snippet */}
-                {f.evaluation_sentiment && (
-                  <div className="text-[11px] text-slate-400 bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
-                    <strong>Student Feedback Sentiment:</strong> {f.evaluation_sentiment}
-                  </div>
-                )}
               </div>
             );
           })
         )}
       </div>
+
+      {/* Modal for Adding New Faculty */}
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Add Faculty Member">
+        <form onSubmit={handleCreateFaculty} className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold text-slate-300 block mb-1">Full Name</label>
+            <input
+              type="text"
+              required
+              placeholder="Dr. Jane Smith"
+              value={newFaculty.full_name}
+              onChange={e => setNewFaculty({ ...newFaculty, full_name: e.target.value })}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-300 block mb-1">Email Address</label>
+            <input
+              type="email"
+              placeholder="jane.smith@university.edu"
+              value={newFaculty.email}
+              onChange={e => setNewFaculty({ ...newFaculty, email: e.target.value })}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">Department</label>
+              <select
+                value={newFaculty.department}
+                onChange={e => setNewFaculty({ ...newFaculty, department: e.target.value })}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              >
+                <option value="Computer Science">Computer Science</option>
+                <option value="Business Administration">Business Admin</option>
+                <option value="Mechanical Engineering">Mechanical Eng</option>
+                <option value="Life Sciences">Life Sciences</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">Designation</label>
+              <input
+                type="text"
+                required
+                placeholder="Associate Professor"
+                value={newFaculty.designation}
+                onChange={e => setNewFaculty({ ...newFaculty, designation: e.target.value })}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">Workload Hours (Weekly)</label>
+              <input
+                type="number"
+                value={newFaculty.workload_hours}
+                onChange={e => setNewFaculty({ ...newFaculty, workload_hours: Number(e.target.value) })}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">Teaching Rating (0-5)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="5"
+                value={newFaculty.teaching_rating}
+                onChange={e => setNewFaculty({ ...newFaculty, teaching_rating: Number(e.target.value) })}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-300 block mb-1">Assigned Courses (Comma separated)</label>
+            <input
+              type="text"
+              placeholder="CS101 Intro, CS201 Data Structures"
+              value={newFaculty.courses_taught}
+              onChange={e => setNewFaculty({ ...newFaculty, courses_taught: e.target.value })}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-3">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-600/30"
+            >
+              Save to Supabase
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

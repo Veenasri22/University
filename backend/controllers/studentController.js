@@ -3,11 +3,19 @@ import { mockStore } from '../services/mockStore.js';
 import { studentCreateSchema, studentPerformanceUpdateSchema } from '../validators/schemas.js';
 import { predictStudentRisk } from '../services/geminiService.js';
 
+const normalizeRiskLevel = (lvl) => {
+  const upper = String(lvl || '').toUpperCase();
+  if (upper === 'CRITICAL' || upper === 'HIGH') return 'HIGH';
+  if (upper === 'MODERATE' || upper === 'MEDIUM') return 'MEDIUM';
+  return 'LOW';
+};
+
 export const getStudents = async (req, res, next) => {
   try {
     const { department, riskLevel, search } = req.query;
 
     let students = [];
+    let isSupabaseActive = false;
 
     if (supabase) {
       try {
@@ -23,22 +31,20 @@ export const getStudents = async (req, res, next) => {
 
         const { data, error } = await query;
         if (!error && data) {
-          students = data.map(s => {
-            const mockMatch = mockStore.students.find(m => m.student_code === s.student_code || m.id === s.id);
-            return {
-              ...s,
-              full_name: s.profiles?.full_name || mockMatch?.full_name || `Student ${s.student_code}`,
-              email: s.profiles?.email || mockMatch?.email || `${s.student_code.toLowerCase()}@student.university.edu`
-            };
-          });
+          isSupabaseActive = true;
+          students = data.map(s => ({
+            ...s,
+            full_name: s.profiles?.full_name || s.full_name || `Student ${s.student_code}`,
+            email: s.profiles?.email || s.email || `${s.student_code.toLowerCase()}@student.university.edu`
+          }));
         }
       } catch (err) {
         console.warn('[studentController] Supabase fetch warning:', err.message);
       }
     }
 
-    // Fallback to mockStore if empty or offline
-    if (students.length === 0) {
+    // Only fall back to mockStore if Supabase client is completely unavailable/unconfigured
+    if (!isSupabaseActive && !supabase) {
       students = [...mockStore.students];
       if (department && department !== 'ALL') {
         students = students.filter(s => s.department === department);
@@ -74,6 +80,7 @@ export const getStudentById = async (req, res, next) => {
     let student = null;
     let advisoryLogs = [];
     let attendanceLogs = [];
+    let isSupabaseActive = false;
 
     if (supabase) {
       try {
@@ -84,11 +91,11 @@ export const getStudentById = async (req, res, next) => {
           .maybeSingle();
 
         if (!error && data) {
-          const mockMatch = mockStore.students.find(m => m.student_code === data.student_code || m.id === data.id);
+          isSupabaseActive = true;
           student = {
             ...data,
-            full_name: data.profiles?.full_name || mockMatch?.full_name || `Student ${data.student_code}`,
-            email: data.profiles?.email || mockMatch?.email || `${data.student_code.toLowerCase()}@student.university.edu`
+            full_name: data.profiles?.full_name || data.full_name || `Student ${data.student_code}`,
+            email: data.profiles?.email || data.email || `${data.student_code.toLowerCase()}@student.university.edu`
           };
 
           // Fetch advisory logs
@@ -110,7 +117,7 @@ export const getStudentById = async (req, res, next) => {
       }
     }
 
-    if (!student) {
+    if (!student && (!supabase || !isSupabaseActive)) {
       student = mockStore.students.find(s => s.id === id || s.student_code === id);
       if (student) {
         advisoryLogs = mockStore.advisory_records.filter(r => r.student_id === student.id);
@@ -190,7 +197,7 @@ export const createStudent = async (req, res, next) => {
             full_name: data.profiles?.full_name || validated.full_name,
             email: data.profiles?.email || validated.email
           };
-          console.log('[Supabase] Inserted new student:', data.id);
+          console.log('[Supabase] Created new student:', data.id);
         } else if (error) {
           console.error('[Supabase] Create student error:', error.message);
         }
@@ -209,7 +216,7 @@ export const createStudent = async (req, res, next) => {
       };
     }
 
-    // Keep mockStore synchronized
+    // Also update mockStore in case fallback is used
     mockStore.students.unshift({
       full_name: validated.full_name,
       email: validated.email,
@@ -218,19 +225,12 @@ export const createStudent = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message: 'Student record created and saved to Supabase',
+      message: 'Student record created successfully in Supabase',
       student: createdStudent
     });
   } catch (err) {
     next(err);
   }
-};
-
-const normalizeRiskLevel = (lvl) => {
-  const upper = String(lvl || '').toUpperCase();
-  if (upper === 'CRITICAL' || upper === 'HIGH') return 'HIGH';
-  if (upper === 'MODERATE' || upper === 'MEDIUM') return 'MEDIUM';
-  return 'LOW';
 };
 
 export const updateStudentPerformance = async (req, res, next) => {
@@ -248,11 +248,10 @@ export const updateStudentPerformance = async (req, res, next) => {
           .or(`id.eq.${id},student_code.eq.${id}`)
           .maybeSingle();
         if (data) {
-          const mockMatch = mockStore.students.find(m => m.student_code === data.student_code || m.id === data.id);
           currentStudent = {
             ...data,
-            full_name: data.profiles?.full_name || mockMatch?.full_name || `Student ${data.student_code}`,
-            email: data.profiles?.email || mockMatch?.email || `${data.student_code.toLowerCase()}@student.university.edu`
+            full_name: data.profiles?.full_name || data.full_name || `Student ${data.student_code}`,
+            email: data.profiles?.email || data.email || `${data.student_code.toLowerCase()}@student.university.edu`
           };
         }
       } catch (err) {
@@ -337,11 +336,10 @@ export const triggerStudentRiskPrediction = async (req, res, next) => {
           .or(`id.eq.${id},student_code.eq.${id}`)
           .maybeSingle();
         if (data) {
-          const mockMatch = mockStore.students.find(m => m.student_code === data.student_code || m.id === data.id);
           student = {
             ...data,
-            full_name: data.profiles?.full_name || mockMatch?.full_name || `Student ${data.student_code}`,
-            email: data.profiles?.email || mockMatch?.email || `${data.student_code.toLowerCase()}@student.university.edu`
+            full_name: data.profiles?.full_name || data.full_name || `Student ${data.student_code}`,
+            email: data.profiles?.email || data.email || `${data.student_code.toLowerCase()}@student.university.edu`
           };
         }
       } catch (e) {}

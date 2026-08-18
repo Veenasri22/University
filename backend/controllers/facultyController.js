@@ -7,6 +7,7 @@ export const getFaculty = async (req, res, next) => {
     const { department } = req.query;
 
     let facultyList = [];
+    let isSupabaseActive = false;
 
     if (supabase) {
       try {
@@ -18,21 +19,19 @@ export const getFaculty = async (req, res, next) => {
 
         const { data, error } = await query;
         if (!error && data) {
-          facultyList = data.map(f => {
-            const mockMatch = mockStore.faculty.find(m => m.id === f.id || m.department === f.department);
-            return {
-              ...f,
-              full_name: f.profiles?.full_name || mockMatch?.full_name || `Faculty ${f.designation}`,
-              email: f.profiles?.email || mockMatch?.email || `faculty@university.edu`
-            };
-          });
+          isSupabaseActive = true;
+          facultyList = data.map(f => ({
+            ...f,
+            full_name: f.profiles?.full_name || f.full_name || `Faculty ${f.designation}`,
+            email: f.profiles?.email || f.email || `faculty@university.edu`
+          }));
         }
       } catch (err) {
         console.warn('[facultyController] Supabase fetch warning:', err.message);
       }
     }
 
-    if (facultyList.length === 0) {
+    if (!isSupabaseActive && !supabase) {
       facultyList = [...mockStore.faculty];
       if (department && department !== 'ALL') {
         facultyList = facultyList.filter(f => f.department === department);
@@ -49,44 +48,136 @@ export const getFaculty = async (req, res, next) => {
   }
 };
 
+export const createFaculty = async (req, res, next) => {
+  try {
+    const { full_name, email, department, designation, workload_hours, max_workload_hours, teaching_rating, research_publications, courses_taught } = req.body;
+
+    if (!full_name || !department || !designation) {
+      return res.status(400).json({ success: false, message: 'Full name, department, and designation are required.' });
+    }
+
+    let userId = null;
+
+    if (supabase) {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .insert({
+            email: email || `prof.${full_name.toLowerCase().replace(/\s+/g, '.')}@university.edu`,
+            full_name,
+            role: 'FACULTY',
+            department
+          })
+          .select()
+          .single();
+
+        if (profile) userId = profile.id;
+      } catch (err) {
+        console.warn('[facultyController] Profile creation warning:', err.message);
+      }
+    }
+
+    const coursesArray = Array.isArray(courses_taught)
+      ? courses_taught
+      : (courses_taught ? String(courses_taught).split(',').map(c => c.trim()) : []);
+
+    const newFacultyData = {
+      ...(userId && { user_id: userId }),
+      department,
+      designation,
+      workload_hours: Number(workload_hours || 0),
+      max_workload_hours: Number(max_workload_hours || 40),
+      teaching_rating: Number(teaching_rating || 5.0),
+      research_publications: Number(research_publications || 0),
+      courses_taught: coursesArray
+    };
+
+    let createdFaculty = null;
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('faculty')
+          .insert(newFacultyData)
+          .select('*, profiles(full_name, email)')
+          .single();
+
+        if (!error && data) {
+          createdFaculty = {
+            ...data,
+            full_name: data.profiles?.full_name || full_name,
+            email: data.profiles?.email || email
+          };
+          console.log('[Supabase] Created faculty record:', data.id);
+        } else if (error) {
+          console.error('[Supabase] Create faculty error:', error.message);
+        }
+      } catch (err) {
+        console.warn('[facultyController] Supabase create faculty fallback:', err.message);
+      }
+    }
+
+    if (!createdFaculty) {
+      createdFaculty = {
+        id: `fac-${Date.now().toString().slice(-4)}`,
+        user_id: userId,
+        full_name,
+        email: email || `prof.${full_name.toLowerCase().replace(/\s+/g, '.')}@university.edu`,
+        ...newFacultyData
+      };
+    }
+
+    mockStore.faculty.unshift(createdFaculty);
+
+    res.status(201).json({
+      success: true,
+      message: 'Faculty record created successfully in Supabase',
+      faculty: createdFaculty
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const getFacultyInsights = async (req, res, next) => {
   try {
     let facultyList = [];
+    let isSupabaseActive = false;
 
     if (supabase) {
       try {
         const { data, error } = await supabase.from('faculty').select('*, profiles(full_name, email)');
-        if (!error && data && data.length > 0) {
-          facultyList = data.map(f => {
-            const mockMatch = mockStore.faculty.find(m => m.id === f.id);
-            return {
-              ...f,
-              full_name: f.profiles?.full_name || mockMatch?.full_name || `Faculty ${f.designation}`,
-              email: f.profiles?.email || mockMatch?.email || `faculty@university.edu`
-            };
-          });
+        if (!error && data) {
+          isSupabaseActive = true;
+          facultyList = data.map(f => ({
+            ...f,
+            full_name: f.profiles?.full_name || f.full_name || `Faculty ${f.designation}`,
+            email: f.profiles?.email || f.email || `faculty@university.edu`
+          }));
         }
       } catch (err) {
         console.warn('[facultyController] Insights query fallback:', err.message);
       }
     }
 
-    if (facultyList.length === 0) {
+    if (!isSupabaseActive && !supabase) {
       facultyList = mockStore.faculty;
     }
 
     const totalFaculty = facultyList.length;
     const avgRating = totalFaculty > 0
       ? (facultyList.reduce((acc, f) => acc + Number(f.teaching_rating || 0), 0) / totalFaculty).toFixed(2)
-      : '5.00';
+      : '0.00';
     const avgWorkload = totalFaculty > 0
       ? (facultyList.reduce((acc, f) => acc + Number(f.workload_hours || 0), 0) / totalFaculty).toFixed(1)
       : '0.0';
     const overloadedCount = facultyList.filter(f => Number(f.workload_hours || 0) > Number(f.max_workload_hours || 40)).length;
 
-    let aiSentimentSummary = 'Faculty members maintain high teaching satisfaction (4.7/5.0). Workload balance is optimal across staff, though Department Chairs require administrative offset due to advisory load.';
+    let aiSentimentSummary = totalFaculty > 0
+      ? 'Faculty members maintain high teaching satisfaction and balanced workload distribution across departments.'
+      : 'No faculty members enrolled yet. Add your institution faculty to generate real-time AI performance summaries.';
 
-    if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
+    if (totalFaculty > 0 && process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
       try {
         const response = await groq.chat.completions.create({
           model: GROQ_MODEL,

@@ -1,30 +1,17 @@
 import { supabase } from '../config/db.js';
 import { mockStore } from '../services/mockStore.js';
 
-/**
- * Helper to resolve course metadata (course_code & course_name)
- */
 function resolveCourseInfo(courseId) {
   const found = mockStore.courses.find(c => c.id === courseId || c.course_code === courseId);
   if (found) {
     return {
       course_code: found.course_code || 'CS201',
-      course_name: found.course_name || found.title || 'Data Structures & Algorithms'
+      course_name: found.course_name || found.title || 'Course'
     };
   }
-  if (courseId === 'crs-002' || courseId === 'CS202') {
-    return { course_code: 'CS202', course_name: 'Database Management Systems' };
-  }
-  return { course_code: 'CS201', course_name: 'Data Structures & Algorithms' };
+  return { course_code: 'CS201', course_name: 'Course' };
 }
 
-/**
- * GET /api/tracker/student/:studentId
- * Returns real student records:
- * 1. Detailed course-wise syllabus completion status.
- * 2. Recent Attendance Log History: Array of objects containing
- *    { id, date, course_code, course_name, status, verification_status }
- */
 export const getStudentTracker = async (req, res, next) => {
   try {
     const { studentId } = req.params;
@@ -32,122 +19,105 @@ export const getStudentTracker = async (req, res, next) => {
     let attendanceRecords = [];
     let syllabusRecords = [];
     let studentData = null;
+    let isSupabaseActive = false;
 
     if (supabase) {
       try {
         const { data: student } = await supabase
           .from('students')
-          .select('*')
+          .select('*, profiles(full_name, email)')
           .or(`id.eq.${studentId},user_id.eq.${studentId}`)
           .maybeSingle();
 
-        if (student) studentData = student;
+        if (student) {
+          isSupabaseActive = true;
+          studentData = {
+            ...student,
+            full_name: student.profiles?.full_name || student.full_name || 'Student'
+          };
+        }
 
         const effectiveStudentId = studentData ? studentData.id : studentId;
 
+        // Try attendance_records
         const { data: att } = await supabase
-          .from('student_attendance')
-          .select('*, courses(course_code, title, course_name)')
-          .eq('student_id', effectiveStudentId)
+          .from('attendance_records')
+          .select('*')
+          .or(`student_id.eq.${effectiveStudentId},student_name.eq.${studentData?.full_name || ''}`)
           .order('date', { ascending: false });
 
         if (att) attendanceRecords = att;
 
-        const { data: syl } = await supabase
-          .from('course_syllabus')
-          .select('*, courses(course_code, title, course_name)');
+        const { data: coursesData } = await supabase
+          .from('courses')
+          .select('*');
 
-        if (syl) syllabusRecords = syl;
+        if (coursesData) {
+          syllabusRecords = coursesData.map(c => ({
+            id: c.id,
+            course_id: c.id,
+            course_code: c.course_code,
+            course_name: c.title,
+            completion_percentage: c.syllabus_progress || 0,
+            unit_title: 'Syllabus Core',
+            topics_covered: c.learning_outcomes?.map(o => o.outcome).join(', ') || 'Core Topics',
+            status: c.syllabus_progress === 100 ? 'Completed' : c.syllabus_progress > 0 ? 'In Progress' : 'Pending'
+          }));
+        }
       } catch (err) {
-        console.warn('[Tracker Controller] Supabase query fallback:', err.message);
+        console.warn('[Tracker Controller] Supabase query warning:', err.message);
       }
     }
 
-    // Fallback or memory store lookup
-    if (!studentData) {
+    if (!studentData && (!supabase || !isSupabaseActive)) {
       studentData = mockStore.students.find(s => s.id === studentId || s.user_id === studentId) || mockStore.students[0];
-    }
-
-    const effectiveId = studentData ? studentData.id : studentId;
-
-    if (attendanceRecords.length === 0) {
-      attendanceRecords = mockStore.student_attendance.filter(a => a.student_id === effectiveId || a.student_id === 'stu-101');
-    }
-
-    if (syllabusRecords.length === 0) {
+      attendanceRecords = mockStore.student_attendance.filter(a => a.student_id === (studentData?.id || studentId));
       syllabusRecords = mockStore.course_syllabus;
     }
 
-    // Process Attendance Logs with course_code and course_name
-    const formattedAttendanceLogs = attendanceRecords.map(log => {
-      const cInfo = log.courses
-        ? { course_code: log.courses.course_code, course_name: log.courses.course_name || log.courses.title }
-        : resolveCourseInfo(log.course_id);
+    const formattedAttendanceLogs = attendanceRecords.map(log => ({
+      id: log.id,
+      date: log.date,
+      course_code: log.course_code || 'CS201',
+      course_name: log.course_name || log.course_code || 'Course',
+      status: log.status || 'Present',
+      verification_status: log.verification_status || 'Verified'
+    }));
 
-      return {
-        id: log.id,
-        date: log.date,
-        course_code: cInfo.course_code,
-        course_name: cInfo.course_name,
-        status: log.status || 'Present',
-        verification_status: log.verification_status || 'Verified'
-      };
-    });
-
-    const presentCount = formattedAttendanceLogs.filter(a => a.status === 'Present' || a.status === 'PRESENT').length;
-    const absentCount = formattedAttendanceLogs.filter(a => a.status === 'Absent' || a.status === 'ABSENT').length;
+    const presentCount = formattedAttendanceLogs.filter(a => (a.status || '').toUpperCase() === 'PRESENT').length;
+    const absentCount = formattedAttendanceLogs.filter(a => (a.status || '').toUpperCase() === 'ABSENT').length;
     const totalCount = formattedAttendanceLogs.length;
 
     const attendancePercentage = totalCount > 0
       ? Number(((presentCount / totalCount) * 100).toFixed(1))
-      : Number(studentData?.attendance_rate || 85.0);
+      : Number(studentData?.attendance_rate || 100);
 
-    // Group syllabus progress course-wise
-    const courseSyllabusMap = {};
-    syllabusRecords.forEach(s => {
-      const cId = s.course_id;
-      if (!courseSyllabusMap[cId]) {
-        const cInfo = s.courses
-          ? { course_code: s.courses.course_code, course_name: s.courses.course_name || s.courses.title }
-          : resolveCourseInfo(cId);
-
-        courseSyllabusMap[cId] = {
-          courseId: cId,
-          courseCode: cInfo.course_code,
-          courseName: cInfo.course_name,
-          units: []
-        };
-      }
-      courseSyllabusMap[cId].units.push({
-        id: s.id,
-        unit_title: s.unit_title,
-        topics_covered: s.topics_covered,
-        completion_percentage: s.completion_percentage,
-        status: s.status,
-        updated_at: s.updated_at
-      });
-    });
-
-    const enrolledSyllabus = Object.values(courseSyllabusMap).map(c => {
-      const avgCompletion = c.units.length > 0
-        ? Math.round(c.units.reduce((acc, u) => acc + (u.completion_percentage || 0), 0) / c.units.length)
-        : 0;
-      return {
-        ...c,
-        overallCompletionPercentage: avgCompletion
-      };
-    });
+    const enrolledSyllabus = syllabusRecords.map(c => ({
+      courseId: c.course_id || c.id,
+      courseCode: c.course_code || 'CS201',
+      courseName: c.course_name || c.title || 'Course',
+      overallCompletionPercentage: Number(c.completion_percentage || 0),
+      units: [
+        {
+          id: c.id,
+          unit_title: c.unit_title || 'Core Syllabus',
+          topics_covered: c.topics_covered || 'Course outline',
+          completion_percentage: Number(c.completion_percentage || 0),
+          status: c.status || 'Pending'
+        }
+      ]
+    }));
 
     return res.json({
       success: true,
-      student: {
+      student: studentData ? {
         id: studentData.id,
         fullName: studentData.full_name || studentData.email || 'Student',
-        studentCode: studentData.student_code || 'CS-2023-089',
+        studentCode: studentData.student_code || 'STU-0001',
         department: studentData.department || 'Computer Science',
-        currentGpa: studentData.current_gpa || 3.20,
+        currentGpa: studentData.current_gpa || 0.00,
         predictedRisk: studentData.predicted_risk || 'LOW'
-      },
+      } : null,
       metrics: {
         attendancePercentage,
         presentCount,
@@ -162,72 +132,54 @@ export const getStudentTracker = async (req, res, next) => {
   }
 };
 
-/**
- * GET /api/tracker/faculty/:facultyId
- * Fetch assigned courses and syllabus topics for logged-in faculty member.
- */
 export const getFacultyTracker = async (req, res, next) => {
   try {
     const { facultyId } = req.params;
 
-    let syllabusList = [];
+    let coursesList = [];
     let attendanceList = [];
+    let isSupabaseActive = false;
 
     if (supabase) {
       try {
-        const { data: syl } = await supabase
-          .from('course_syllabus')
-          .select('*, courses(course_code, title, course_name)')
-          .or(`faculty_id.eq.${facultyId},faculty_id.eq.prof-002`);
+        const { data: cData } = await supabase.from('courses').select('*');
+        if (cData) {
+          isSupabaseActive = true;
+          coursesList = cData;
+        }
 
-        if (syl && syl.length > 0) syllabusList = syl;
-
-        const { data: att } = await supabase
-          .from('student_attendance')
-          .select('*');
-
-        if (att) attendanceList = att;
+        const { data: aData } = await supabase.from('attendance_records').select('*');
+        if (aData) attendanceList = aData;
       } catch (err) {
-        console.warn('[Tracker Controller] Supabase faculty query fallback:', err.message);
+        console.warn('[Tracker Controller] Supabase faculty query warning:', err.message);
       }
     }
 
-    if (syllabusList.length === 0) {
-      syllabusList = mockStore.course_syllabus.filter(s => s.faculty_id === facultyId || s.faculty_id === 'prof-002');
-      if (syllabusList.length === 0) syllabusList = mockStore.course_syllabus;
+    if (!isSupabaseActive && !supabase) {
+      coursesList = mockStore.courses;
+      attendanceList = mockStore.attendance_logs;
     }
 
-    if (attendanceList.length === 0) {
-      attendanceList = mockStore.student_attendance;
-    }
-
-    const totalPresent = attendanceList.filter(a => a.status === 'Present' || a.status === 'PRESENT').length;
-    const totalAbsent = attendanceList.filter(a => a.status === 'Absent' || a.status === 'ABSENT').length;
+    const totalPresent = attendanceList.filter(a => (a.status || '').toUpperCase() === 'PRESENT').length;
+    const totalAbsent = attendanceList.filter(a => (a.status || '').toUpperCase() === 'ABSENT').length;
     const totalRecords = attendanceList.length;
 
     const classAttendanceAverage = totalRecords > 0
       ? Number(((totalPresent / totalRecords) * 100).toFixed(1))
-      : 84.5;
+      : 100;
 
-    // Attach course code & course name metadata
-    const syllabusWithCourse = syllabusList.map(item => {
-      const cInfo = item.courses
-        ? { course_code: item.courses.course_code, course_name: item.courses.course_name || item.courses.title }
-        : resolveCourseInfo(item.course_id);
-
-      return {
-        id: item.id,
-        course_id: item.course_id,
-        faculty_id: item.faculty_id,
-        course_code: cInfo.course_code,
-        course_name: cInfo.course_name,
-        unit_title: item.unit_title,
-        topics_covered: item.topics_covered,
-        completion_percentage: item.completion_percentage,
-        status: item.status,
-        updated_at: item.updated_at || new Date().toISOString()
-      };
-    });
+    const syllabusWithCourse = coursesList.map(item => ({
+      id: item.id,
+      course_id: item.id,
+      faculty_id: facultyId,
+      course_code: item.course_code,
+      course_name: item.title,
+      unit_title: 'Syllabus & Learning Outcomes',
+      topics_covered: Array.isArray(item.learning_outcomes) ? item.learning_outcomes.map(o => o.outcome).join(', ') : 'Topics',
+      completion_percentage: item.syllabus_progress || 0,
+      status: item.syllabus_progress === 100 ? 'Completed' : item.syllabus_progress > 0 ? 'In Progress' : 'Pending',
+      updated_at: item.updated_at || new Date().toISOString()
+    }));
 
     return res.json({
       success: true,
@@ -245,16 +197,12 @@ export const getFacultyTracker = async (req, res, next) => {
   }
 };
 
-/**
- * POST /api/tracker/syllabus/update
- * Allows faculty to update completion_percentage, status, AND topics_covered for any syllabus unit.
- */
 export const updateSyllabusTopic = async (req, res, next) => {
   try {
     const { id, completion_percentage, status, topics_covered } = req.body;
 
     if (!id) {
-      return res.status(400).json({ success: false, error: 'Syllabus unit ID is required.' });
+      return res.status(400).json({ success: false, error: 'Course or Syllabus unit ID is required.' });
     }
 
     const completionPct = Number(completion_percentage);
@@ -263,61 +211,45 @@ export const updateSyllabusTopic = async (req, res, next) => {
     }
 
     let updatedItem = null;
-    const updatePayload = {
-      completion_percentage: completionPct,
-      status: status || (completionPct === 100 ? 'Completed' : completionPct > 0 ? 'In Progress' : 'Pending'),
-      updated_at: new Date().toISOString()
-    };
-
-    if (topics_covered !== undefined && topics_covered !== null) {
-      updatePayload.topics_covered = String(topics_covered).trim();
-    }
 
     if (supabase) {
       try {
         const { data, error } = await supabase
-          .from('course_syllabus')
-          .update(updatePayload)
+          .from('courses')
+          .update({
+            syllabus_progress: completionPct,
+            updated_at: new Date().toISOString()
+          })
           .eq('id', id)
-          .select('*, courses(course_code, title, course_name)')
+          .select()
           .single();
 
         if (!error && data) {
-          updatedItem = data;
+          updatedItem = {
+            id: data.id,
+            course_code: data.course_code,
+            course_name: data.title,
+            completion_percentage: data.syllabus_progress,
+            status: data.syllabus_progress === 100 ? 'Completed' : data.syllabus_progress > 0 ? 'In Progress' : 'Pending'
+          };
         }
       } catch (err) {
         console.warn('[Tracker Controller] Supabase update syllabus warning:', err.message);
       }
     }
 
-    // Update in stateful mockStore fallback
-    const index = mockStore.course_syllabus.findIndex(s => s.id === id);
-    if (index !== -1) {
-      mockStore.course_syllabus[index] = {
-        ...mockStore.course_syllabus[index],
-        ...updatePayload
-      };
-      if (!updatedItem) updatedItem = mockStore.course_syllabus[index];
-    } else if (!updatedItem) {
+    if (!updatedItem) {
       updatedItem = {
         id,
-        ...updatePayload
+        completion_percentage: completionPct,
+        status: status || (completionPct === 100 ? 'Completed' : completionPct > 0 ? 'In Progress' : 'Pending')
       };
     }
-
-    // Ensure resolved course details exist on returned payload
-    const cInfo = updatedItem.courses
-      ? { course_code: updatedItem.courses.course_code, course_name: updatedItem.courses.course_name || updatedItem.courses.title }
-      : resolveCourseInfo(updatedItem.course_id);
 
     return res.json({
       success: true,
       message: 'Syllabus unit updated successfully.',
-      syllabus: {
-        ...updatedItem,
-        course_code: cInfo.course_code,
-        course_name: cInfo.course_name
-      }
+      syllabus: updatedItem
     });
   } catch (err) {
     next(err);

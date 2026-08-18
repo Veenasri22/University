@@ -60,12 +60,9 @@ app.use('/api/tracker', trackerRoutes);
 // Centralized Error Handling
 app.use(errorHandler);
 
-import { seedDatabase } from './scripts/seed.js';
-
 app.listen(PORT, () => {
   console.log(`====================================================`);
   console.log(`🎓 University Academic Intelligence Backend Server`);
   console.log(`🚀 Running on: http://localhost:${PORT}`);
   console.log(`====================================================`);
-  seedDatabase().catch(err => console.warn('[Seed] Async seed error:', err.message));
 });
