@@ -35,10 +35,10 @@ const NAV_SECTIONS = [
   {
     label: 'Academic Management',
     items: [
-      { label: 'Student Directory',   path: '/students',   icon: Users,         roles: FACULTY_UP },
-      { label: 'Faculty & Workload',  path: '/faculty',    icon: GraduationCap, roles: ADMIN_ROLES },
-      { label: 'Curriculum & Syllabi', path: '/curriculum', icon: BookOpen,     roles: FACULTY_UP },
-      { label: 'Attendance Logs',     path: '/attendance', icon: CalendarCheck, roles: FACULTY_UP },
+      { label: 'Student Directory',    path: '/students',   icon: Users,         roles: FACULTY_UP },
+      { label: 'Faculty & Subjects',   path: '/faculty',    icon: GraduationCap, roles: ALL_ROLES },
+      { label: 'Curriculum & Syllabi', path: '/curriculum', icon: BookOpen,     roles: ALL_ROLES },
+      { label: 'Attendance Logs',      path: '/attendance', icon: CalendarCheck, roles: ALL_ROLES },
     ]
   },
   {

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import {
   CalendarCheck,
   AlertTriangle,
@@ -8,11 +9,15 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  Sparkles
+  Sparkles,
+  ShieldCheck,
+  UserCheck
 } from 'lucide-react';
 import { Modal } from '../components/common/Modal.jsx';
 
 export const Attendance = () => {
+  const { user } = useAuth();
+  const isStudent = user?.role === 'STUDENT' || user?.role === 'Student';
   const [logs, setLogs] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,9 +26,9 @@ export const Attendance = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState({
     course_code: 'CS201',
-    student_name: 'Alex Rivera',
+    student_name: user?.full_name || 'Alex Rivera',
     status: 'ABSENT',
-    department: 'Computer Science'
+    department: user?.department || 'Computer Science'
   });
 
   const [mcpResult, setMcpResult] = useState(null);
@@ -66,20 +71,29 @@ export const Attendance = () => {
         <div>
           <h1 className="text-2xl font-extrabold text-white font-outfit tracking-tight flex items-center gap-2">
             <CalendarCheck className="w-6 h-6 text-blue-500" />
-            Attendance Analytics & Compliance Thresholds
+            {isStudent ? 'My Attendance & Compliance Records' : 'Attendance Analytics & Compliance Thresholds'}
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Real-time participation tracking and automated threshold alert warnings (&lt;75% attendance).
+            {isStudent
+              ? `Personal participation records for ${user?.full_name || 'Student'} (${user?.department || 'Computer Science'}). Keep above 75% threshold.`
+              : 'Real-time participation tracking and automated threshold alert warnings (<75% attendance).'}
           </p>
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          Log Class Attendance Entry
-        </button>
+        {!isStudent ? (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Log Class Attendance Entry
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
+            <ShieldCheck className="w-4 h-4" />
+            <span>Attendance Status: Good Standing (&gt;75%)</span>
+          </div>
+        )}
       </div>
 
       {/* MCP Notification Success Banner */}

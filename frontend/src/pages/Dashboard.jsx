@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StatCard } from '../components/common/StatCard.jsx';
 import { RiskBadge } from '../components/common/RiskBadge.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import api from '../services/api.js';
 import {
   Users,
@@ -12,7 +13,8 @@ import {
   Brain,
   CalendarCheck,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  BookOpen
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -51,6 +53,8 @@ const departmentPerformanceData = [
 ];
 
 export const Dashboard = () => {
+  const { user } = useAuth();
+  const isStudent = user?.role === 'STUDENT' || user?.role === 'Student';
   const [students, setStudents] = useState([]);
   const [faculty, setFaculty] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -89,13 +93,15 @@ export const Dashboard = () => {
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-xs font-bold text-blue-400 mb-2">
               <Brain className="w-3.5 h-3.5" />
-              <span>Gemini 2.5 Flash Engine Active</span>
+              <span>{isStudent ? `Welcome back, ${user?.full_name || 'Student'}` : 'Gemini 2.5 Flash Engine Active'}</span>
             </div>
             <h1 className="text-2xl md:text-3xl font-extrabold text-white font-outfit tracking-tight">
-              Executive Academic Intelligence
+              {isStudent ? 'Student Academic Portal' : 'Executive Academic Intelligence'}
             </h1>
             <p className="text-xs text-slate-400 mt-1 max-w-2xl">
-              Consolidated real-time monitoring across 5 university departments, student GPA risk trajectories, and accreditation readiness.
+              {isStudent
+                ? `Track your attendance logs, enrolled curriculum courses, prerequisites, and faculty course instructors for ${user?.department || 'Computer Science'}.`
+                : 'Consolidated real-time monitoring across 5 university departments, student GPA risk trajectories, and accreditation readiness.'}
             </p>
           </div>
 
@@ -105,17 +111,84 @@ export const Dashboard = () => {
               className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center gap-2 transition-all"
             >
               <Sparkles className="w-4 h-4" />
-              Launch AI Advisor
+              Ask AI Advisor
             </button>
-            <button
-              onClick={() => navigate('/reports')}
-              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 transition-all"
-            >
-              Generate Audit Report
-            </button>
+            {!isStudent && (
+              <button
+                onClick={() => navigate('/reports')}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 transition-all"
+              >
+                Generate Audit Report
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Student Specific Quick Access Action Cards */}
+      {isStudent && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div
+            onClick={() => navigate('/attendance')}
+            className="glass-card rounded-3xl p-6 border border-slate-800 hover:border-blue-500/40 transition-all cursor-pointer group space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <div className="p-3 rounded-2xl bg-blue-500/10 text-blue-400 border border-blue-500/20 group-hover:scale-110 transition-all">
+                <CalendarCheck className="w-6 h-6" />
+              </div>
+              <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white font-outfit">My Attendance Logs</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Check class participation records & compliance thresholds.</p>
+            </div>
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-bold text-emerald-400">
+              <span>Attendance Rate: 90.0%</span>
+              <span>Good Standing</span>
+            </div>
+          </div>
+
+          <div
+            onClick={() => navigate('/curriculum')}
+            className="glass-card rounded-3xl p-6 border border-slate-800 hover:border-blue-500/40 transition-all cursor-pointer group space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <div className="p-3 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 group-hover:scale-110 transition-all">
+                <BookOpen className="w-6 h-6" />
+              </div>
+              <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white font-outfit">Courses & Curriculum</h3>
+              <p className="text-xs text-slate-400 mt-0.5">View syllabus progress, prerequisites & learning outcomes.</p>
+            </div>
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-bold text-indigo-400">
+              <span>Syllabus Completion</span>
+              <span>Track Progress</span>
+            </div>
+          </div>
+
+          <div
+            onClick={() => navigate('/faculty')}
+            className="glass-card rounded-3xl p-6 border border-slate-800 hover:border-blue-500/40 transition-all cursor-pointer group space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <div className="p-3 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 group-hover:scale-110 transition-all">
+                <GraduationCap className="w-6 h-6" />
+              </div>
+              <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-amber-400 group-hover:translate-x-1 transition-all" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white font-outfit">Faculty & Subjects Taught</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Look up professors and which subjects they teach.</p>
+            </div>
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-bold text-amber-400">
+              <span>Faculty Directory</span>
+              <span>Search Instructors</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">

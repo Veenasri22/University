@@ -31,7 +31,7 @@ END $$;
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   email TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
+  password_hash TEXT,
   full_name TEXT NOT NULL,
   role user_role NOT NULL DEFAULT 'STUDENT',
   department TEXT,

@@ -3,11 +3,85 @@ import jwt from 'jsonwebtoken';
 import { mockStore } from '../services/mockStore.js';
 import { registerSchema, loginSchema } from '../validators/schemas.js';
 import { JWT_SECRET } from '../middleware/authMiddleware.js';
+import { supabase } from '../config/db.js';
 
 export const register = async (req, res, next) => {
   try {
     const validated = registerSchema.parse(req.body);
 
+    // 1. If Supabase client is active, register using Supabase Auth
+    if (supabase) {
+      const { data, error } = await supabase.auth.signUp({
+        email: validated.email,
+        password: validated.password,
+        options: {
+          data: {
+            full_name: validated.full_name,
+            role: validated.role,
+            department: validated.department || 'Computer Science'
+          }
+        }
+      });
+
+      if (error) {
+        return res.status(400).json({ success: false, message: error.message });
+      }
+
+      const user = data.user;
+      if (!user) {
+        return res.status(400).json({ success: false, message: 'User registration failed' });
+      }
+
+      // Fetch profile synced via Postgres trigger (or insert directly as fallback)
+      let { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (!profile) {
+        const { data: newProfile } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            email: validated.email,
+            full_name: validated.full_name,
+            role: validated.role,
+            department: validated.department || 'Computer Science'
+          })
+          .select()
+          .maybeSingle();
+
+        profile = newProfile;
+      }
+
+      const token = jwt.sign(
+        {
+          id: user.id,
+          email: user.email,
+          role: validated.role,
+          department: validated.department || 'Computer Science',
+          full_name: validated.full_name
+        },
+        JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+
+      return res.status(201).json({
+        success: true,
+        message: 'Account created successfully',
+        token,
+        user: profile || {
+          id: user.id,
+          email: user.email,
+          full_name: validated.full_name,
+          role: validated.role,
+          department: validated.department || 'Computer Science'
+        }
+      });
+    }
+
+    // 2. Fallback to stateful local memory mode if Supabase URL is unconfigured
     const existingUser = mockStore.profiles.find(p => p.email.toLowerCase() === validated.email.toLowerCase());
     if (existingUser) {
       return res.status(400).json({ success: false, message: 'Email address is already registered' });
@@ -27,7 +101,6 @@ export const register = async (req, res, next) => {
 
     mockStore.profiles.push(newProfile);
 
-    // If role is STUDENT, also create student record
     if (validated.role === 'STUDENT') {
       mockStore.students.push({
         id: `stu-${Date.now().toString().slice(-4)}`,
@@ -69,6 +142,46 @@ export const register = async (req, res, next) => {
 export const login = async (req, res, next) => {
   try {
     const validated = loginSchema.parse(req.body);
+
+    if (supabase) {
+      const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+        email: validated.email,
+        password: validated.password
+      });
+
+      if (authErr) {
+        return res.status(401).json({ success: false, message: authErr.message });
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+
+      const userRole = profile?.role || authData.user.user_metadata?.role || 'STUDENT';
+      const userDept = profile?.department || authData.user.user_metadata?.department || 'Computer Science';
+      const userName = profile?.full_name || authData.user.user_metadata?.full_name || userRole;
+
+      const token = jwt.sign(
+        { id: authData.user.id, email: authData.user.email, role: userRole, department: userDept, full_name: userName },
+        JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+
+      return res.json({
+        success: true,
+        message: 'Login successful',
+        token,
+        user: profile || {
+          id: authData.user.id,
+          email: authData.user.email,
+          full_name: userName,
+          role: userRole,
+          department: userDept
+        }
+      });
+    }
 
     const user = mockStore.profiles.find(p => p.email.toLowerCase() === validated.email.toLowerCase());
     if (!user) {

@@ -17,6 +17,7 @@ export const Faculty = () => {
   const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(true);
   const [department, setDepartment] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchFacultyData = async () => {
     try {
@@ -38,6 +39,15 @@ export const Faculty = () => {
     fetchFacultyData();
   }, [department]);
 
+  const filteredFaculty = faculty.filter(f => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    const nameMatch = f.full_name?.toLowerCase().includes(q);
+    const deptMatch = f.department?.toLowerCase().includes(q);
+    const courseMatch = f.courses_taught?.some(c => c.toLowerCase().includes(q));
+    return nameMatch || deptMatch || courseMatch;
+  });
+
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header */}
@@ -45,24 +55,37 @@ export const Faculty = () => {
         <div>
           <h1 className="text-2xl font-extrabold text-white font-outfit tracking-tight flex items-center gap-2">
             <GraduationCap className="w-6 h-6 text-blue-500" />
-            Faculty Governance & Workload Tracking
+            Faculty & Course Instructors
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Teaching evaluations, course allocations, research output, and sentiment analysis.
+            Faculty directory, assigned courses, teaching ratings, and department allocations.
           </p>
         </div>
 
-        <select
-          value={department}
-          onChange={(e) => setDepartment(e.target.value)}
-          className="bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-        >
-          <option value="ALL">All Departments</option>
-          <option value="Computer Science">Computer Science</option>
-          <option value="Business Administration">Business Admin</option>
-          <option value="Mechanical Engineering">Mechanical Eng</option>
-          <option value="Life Sciences">Life Sciences</option>
-        </select>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="Search faculty or subject..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-slate-900 border border-slate-700/80 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 w-48 sm:w-64"
+            />
+          </div>
+
+          <select
+            value={department}
+            onChange={(e) => setDepartment(e.target.value)}
+            className="bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+          >
+            <option value="ALL">All Departments</option>
+            <option value="Computer Science">Computer Science</option>
+            <option value="Business Administration">Business Admin</option>
+            <option value="Mechanical Engineering">Mechanical Eng</option>
+            <option value="Life Sciences">Life Sciences</option>
+          </select>
+        </div>
       </div>
 
       {/* Faculty Insights Executive Banner */}
@@ -87,8 +110,10 @@ export const Faculty = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {loading ? (
           <div className="col-span-2 text-center text-slate-400 text-xs py-12">Loading faculty roster...</div>
+        ) : filteredFaculty.length === 0 ? (
+          <div className="col-span-2 text-center text-slate-400 text-xs py-12">No faculty members found matching "{searchQuery}".</div>
         ) : (
-          faculty.map((f) => {
+          filteredFaculty.map((f) => {
             const workloadPct = Math.min(100, Math.round((f.workload_hours / (f.max_workload_hours || 40)) * 100));
             const isOverloaded = f.workload_hours > (f.max_workload_hours || 40);
 
