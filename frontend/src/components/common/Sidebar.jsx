@@ -78,22 +78,22 @@ export const Sidebar = () => {
 
   return (
     <aside
-      className={`${collapsed ? 'w-[72px]' : 'w-64'} bg-slate-900/95 border-r border-slate-800/70 flex flex-col h-screen sticky top-0 backdrop-blur-xl z-30 transition-all duration-300 ease-in-out overflow-hidden`}
+      className={`${collapsed ? 'w-[72px]' : 'w-64'} bg-white dark:bg-slate-900/95 border-r border-slate-200 dark:border-slate-800/70 flex flex-col h-screen sticky top-0 backdrop-blur-xl z-30 transition-all duration-300 ease-in-out overflow-hidden shadow-sm`}
     >
       {/* Brand Header */}
-      <div className={`flex items-center gap-3 border-b border-slate-800/70 flex-shrink-0 ${collapsed ? 'px-4 py-5 justify-center' : 'px-5 py-4'}`}>
+      <div className={`flex items-center gap-3 border-b border-slate-200 dark:border-slate-800/70 flex-shrink-0 ${collapsed ? 'px-4 py-5 justify-center' : 'px-5 py-4'}`}>
         <div className="relative flex-shrink-0">
           <div className="p-2.5 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white shadow-lg shadow-blue-500/25">
             <Sparkles className="w-4.5 h-4.5 w-[18px] h-[18px]" />
           </div>
-          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-slate-900 shadow-[0_0_6px_2px_rgba(52,211,153,0.5)]" />
+          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-white dark:border-slate-900 shadow-[0_0_6px_2px_rgba(52,211,153,0.5)]" />
         </div>
         {!collapsed && (
           <div className="min-w-0">
-            <h1 className="font-extrabold text-[13px] leading-tight text-white tracking-tight font-outfit truncate">
+            <h1 className="font-extrabold text-[13px] leading-tight text-slate-900 dark:text-white tracking-tight font-outfit truncate">
               Academic AI
             </h1>
-            <p className="text-[10px] font-bold text-blue-400 tracking-widest uppercase">
+            <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 tracking-widest uppercase">
               Intelligence Platform
             </p>
           </div>
