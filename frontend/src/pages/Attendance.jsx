@@ -169,11 +169,11 @@ export const Attendance = () => {
                 <td className="px-6 py-3 text-slate-400">{log.date}</td>
                 <td className="px-6 py-3">
                   <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                    log.status === 'PRESENT' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                    log.status === 'ABSENT' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' :
-                    'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                    log.status === 'PRESENT' || log.status === 'Present' 
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                      : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                   }`}>
-                    {log.status}
+                    {log.status === 'Present' ? 'PRESENT' : log.status === 'Absent' ? 'ABSENT' : log.status}
                   </span>
                 </td>
               </tr>
@@ -217,8 +217,6 @@ export const Attendance = () => {
               >
                 <option value="PRESENT">PRESENT</option>
                 <option value="ABSENT">ABSENT</option>
-                <option value="LATE">LATE</option>
-                <option value="EXCUSED">EXCUSED</option>
               </select>
             </div>
           </div>

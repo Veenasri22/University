@@ -316,7 +316,7 @@ export const mockStore = {
   attendance_logs: [
     { id: 'att-1', course_code: 'CS201', course_id: 'crs-301', student_id: 'stu-101', student_name: 'Alex Rivera', date: '2026-07-28', status: 'ABSENT', department: 'Computer Science' },
     { id: 'att-2', course_code: 'CS201', course_id: 'crs-301', student_id: 'stu-102', student_name: 'Sophia Montgomery', date: '2026-07-28', status: 'PRESENT', department: 'Business Administration' },
-    { id: 'att-3', course_code: 'ME202', course_id: 'crs-303', student_id: 'stu-103', student_name: 'Liam Vance', date: '2026-07-27', status: 'LATE', department: 'Mechanical Engineering' },
+    { id: 'att-3', course_code: 'ME202', course_id: 'crs-303', student_id: 'stu-103', student_name: 'Liam Vance', date: '2026-07-27', status: 'PRESENT', department: 'Mechanical Engineering' },
     { id: 'att-4', course_code: 'HUM101', course_id: null, student_id: 'stu-105', student_name: 'Ethan Blackwood', date: '2026-07-27', status: 'ABSENT', department: 'Humanities' }
   ],
 

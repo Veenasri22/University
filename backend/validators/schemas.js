@@ -45,7 +45,7 @@ export const attendanceRecordSchema = z.object({
   studentId: z.string().min(1, { message: 'Student ID is required' }),
   courseId: z.string().min(1, { message: 'Course ID is required' }),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'Date format must be YYYY-MM-DD' }),
-  status: z.enum(['Present', 'Absent', 'PRESENT', 'ABSENT', 'LATE'])
+  status: z.enum(['Present', 'Absent', 'PRESENT', 'ABSENT'])
 });
 
 export const batchAttendanceSchema = z.object({
@@ -53,7 +53,7 @@ export const batchAttendanceSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   records: z.array(z.object({
     studentId: z.string().min(1),
-    status: z.enum(['Present', 'Absent', 'PRESENT', 'ABSENT', 'LATE'])
+    status: z.enum(['Present', 'Absent', 'PRESENT', 'ABSENT'])
   })).min(1, 'At least one attendance record is required')
 });
 
