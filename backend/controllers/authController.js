@@ -11,23 +11,42 @@ export const register = async (req, res, next) => {
 
     // 1. If Supabase client is active, register using Supabase Auth
     if (supabase) {
-      const { data, error } = await supabase.auth.signUp({
+      let user = null;
+
+      // Try creating user via Admin API (bypasses email confirmation & email rate limits)
+      const { data: adminData, error: adminError } = await supabase.auth.admin.createUser({
         email: validated.email,
         password: validated.password,
-        options: {
-          data: {
-            full_name: validated.full_name,
-            role: validated.role,
-            department: validated.department || 'Computer Science'
-          }
+        email_confirm: true,
+        user_metadata: {
+          full_name: validated.full_name,
+          role: validated.role,
+          department: validated.department || 'Computer Science'
         }
       });
 
-      if (error) {
-        return res.status(400).json({ success: false, message: error.message });
+      if (!adminError && adminData?.user) {
+        user = adminData.user;
+      } else {
+        // Fallback to standard signUp
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email: validated.email,
+          password: validated.password,
+          options: {
+            data: {
+              full_name: validated.full_name,
+              role: validated.role,
+              department: validated.department || 'Computer Science'
+            }
+          }
+        });
+
+        if (signUpError) {
+          return res.status(400).json({ success: false, message: signUpError.message });
+        }
+        user = signUpData.user;
       }
 
-      const user = data.user;
       if (!user) {
         return res.status(400).json({ success: false, message: 'User registration failed' });
       }
