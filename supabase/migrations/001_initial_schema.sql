@@ -1,224 +1,190 @@
--- Supabase Cloud Migration: Initial Schema & RLS Policies & Seed Data
--- University Academic Intelligence Platform
+-- Production PostgreSQL 15+ Migration Schema with RLS
+-- University Academic Intelligence & Risk Management Platform
 -- Migration: 001_initial_schema.sql
 
--- 1. Enable Required Extensions
+-- 1. Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "vector";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- 2. User Roles & Enums
+-- 2. Custom Enums
 DO $$ BEGIN
-  CREATE TYPE user_role AS ENUM ('SUPER_ADMIN', 'DEAN', 'FACULTY', 'ACADEMIC_ADVISOR', 'STUDENT');
-EXCEPTION
-  WHEN duplicate_object THEN null;
-END $$;
+  CREATE TYPE user_role AS ENUM ('ADMIN', 'HOD', 'FACULTY', 'STUDENT');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 DO $$ BEGIN
-  CREATE TYPE risk_level AS ENUM ('LOW', 'MEDIUM', 'HIGH');
-EXCEPTION
-  WHEN duplicate_object THEN null;
-END $$;
+  CREATE TYPE risk_level AS ENUM ('HIGH', 'MEDIUM', 'LOW');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 DO $$ BEGIN
-  CREATE TYPE academic_status AS ENUM ('ACTIVE', 'PROBATION', 'SUSPENDED', 'GRADUATED');
-EXCEPTION
-  WHEN duplicate_object THEN null;
-END $$;
+  CREATE TYPE attendance_status AS ENUM ('PRESENT', 'ABSENT', 'LEAVE');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
 
--- 3. Tables Definition
+-- 3. Departments Table
+CREATE TABLE IF NOT EXISTS public.departments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL,
+  code TEXT UNIQUE NOT NULL,
+  hod_id UUID,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
--- Profiles Table (Users)
+-- 4. Profiles Table (Linked to Auth Users)
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   email TEXT UNIQUE NOT NULL,
-  password_hash TEXT,
   full_name TEXT NOT NULL,
   role user_role NOT NULL DEFAULT 'STUDENT',
-  department TEXT,
+  department_id UUID REFERENCES public.departments(id) ON DELETE SET NULL,
   avatar_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Students Table
+-- Add circular FK for HOD on departments
+ALTER TABLE public.departments DROP CONSTRAINT IF EXISTS fk_departments_hod;
+ALTER TABLE public.departments ADD CONSTRAINT fk_departments_hod FOREIGN KEY (hod_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+-- 5. Students Table
 CREATE TABLE IF NOT EXISTS public.students (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-  student_code TEXT UNIQUE NOT NULL,
-  department TEXT NOT NULL,
-  enrollment_year INT NOT NULL,
-  current_gpa NUMERIC(3,2) DEFAULT 0.00,
-  attendance_rate NUMERIC(5,2) DEFAULT 100.00,
-  credits_earned INT DEFAULT 0,
-  credits_required INT DEFAULT 120,
-  predicted_risk risk_level DEFAULT 'LOW',
-  status academic_status DEFAULT 'ACTIVE',
-  advisor_notes TEXT,
-  gpa_history JSONB DEFAULT '[]'::jsonb,
+  student_id_number TEXT UNIQUE NOT NULL,
+  phone TEXT,
+  department_id UUID REFERENCES public.departments(id) ON DELETE CASCADE,
+  course TEXT NOT NULL DEFAULT 'B.Tech Computer Science',
+  year INT NOT NULL DEFAULT 1,
+  semester INT NOT NULL DEFAULT 1,
+  dob DATE,
+  admission_year INT NOT NULL DEFAULT 2024,
+  gender TEXT DEFAULT 'Male',
+  status TEXT DEFAULT 'ACTIVE',
+  cgpa NUMERIC(3,2) DEFAULT 0.00,
+  current_risk_level risk_level DEFAULT 'LOW',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Faculty Table
+-- 6. Faculty Table
 CREATE TABLE IF NOT EXISTS public.faculty (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-  department TEXT NOT NULL,
-  designation TEXT NOT NULL,
-  workload_hours INT DEFAULT 0,
-  max_workload_hours INT DEFAULT 40,
-  teaching_rating NUMERIC(3,2) DEFAULT 5.00,
-  research_publications INT DEFAULT 0,
-  courses_taught TEXT[] DEFAULT '{}',
-  evaluation_sentiment TEXT,
+  faculty_id_number TEXT UNIQUE NOT NULL,
+  department_id UUID REFERENCES public.departments(id) ON DELETE CASCADE,
+  designation TEXT NOT NULL DEFAULT 'Assistant Professor',
+  experience_years INT DEFAULT 0,
+  joining_date DATE DEFAULT CURRENT_DATE,
+  status TEXT DEFAULT 'ACTIVE',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Courses / Curriculum Table
-CREATE TABLE IF NOT EXISTS public.courses (
+-- 7. Subjects Table
+CREATE TABLE IF NOT EXISTS public.subjects (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  course_code TEXT UNIQUE NOT NULL,
-  title TEXT NOT NULL,
-  department TEXT NOT NULL,
-  credits INT NOT NULL,
-  syllabus_progress NUMERIC(5,2) DEFAULT 0.00,
-  learning_outcomes JSONB DEFAULT '[]'::jsonb,
-  prerequisites TEXT[] DEFAULT '{}',
+  subject_code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  credits INT NOT NULL DEFAULT 3,
+  semester INT NOT NULL DEFAULT 1,
+  department_id UUID REFERENCES public.departments(id) ON DELETE CASCADE,
   faculty_id UUID REFERENCES public.faculty(id) ON DELETE SET NULL,
+  total_units INT DEFAULT 5,
+  completed_units INT DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Attendance Records Table
-CREATE TABLE IF NOT EXISTS public.attendance_records (
+-- 8. Attendance Table
+CREATE TABLE IF NOT EXISTS public.attendance (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   student_id UUID REFERENCES public.students(id) ON DELETE CASCADE,
-  course_id UUID REFERENCES public.courses(id) ON DELETE CASCADE,
-  course_code TEXT NOT NULL,
-  student_name TEXT NOT NULL,
-  department TEXT NOT NULL,
+  subject_id UUID REFERENCES public.subjects(id) ON DELETE CASCADE,
+  faculty_id UUID REFERENCES public.faculty(id) ON DELETE SET NULL,
   date DATE NOT NULL DEFAULT CURRENT_DATE,
-  status TEXT NOT NULL CHECK (status IN ('PRESENT', 'ABSENT', 'LATE', 'EXCUSED')),
+  status attendance_status NOT NULL DEFAULT 'PRESENT',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Academic Policy Documents (RAG Vector Store)
-CREATE TABLE IF NOT EXISTS public.academic_policies (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  title TEXT NOT NULL,
-  category TEXT NOT NULL,
-  content TEXT NOT NULL,
-  embedding VECTOR(768), -- Dimensions for Gemini Text Embeddings
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Student Advisory Records
-CREATE TABLE IF NOT EXISTS public.advisory_records (
+-- 9. Marks Table
+CREATE TABLE IF NOT EXISTS public.marks (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   student_id UUID REFERENCES public.students(id) ON DELETE CASCADE,
-  advisor_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-  advisor_name TEXT,
-  risk_assessment TEXT NOT NULL,
-  action_plan JSONB NOT NULL,
-  assumptions_confirmed BOOLEAN DEFAULT FALSE,
+  subject_id UUID REFERENCES public.subjects(id) ON DELETE CASCADE,
+  semester INT NOT NULL DEFAULT 1,
+  internal_marks NUMERIC(5,2) DEFAULT 0.00,
+  assignment_marks NUMERIC(5,2) DEFAULT 0.00,
+  midterm_marks NUMERIC(5,2) DEFAULT 0.00,
+  external_marks NUMERIC(5,2) DEFAULT 0.00,
+  total_marks NUMERIC(5,2) DEFAULT 0.00,
+  grade TEXT DEFAULT 'F',
+  is_backlog BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- AI Generated Advisories Table
-CREATE TABLE IF NOT EXISTS public.ai_generated_advisories (
+-- 10. Risk Evaluations Table
+CREATE TABLE IF NOT EXISTS public.risk_evaluations (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  entity_id UUID NOT NULL,
+  student_id UUID REFERENCES public.students(id) ON DELETE CASCADE,
   risk_level TEXT NOT NULL,
-  summary TEXT NOT NULL,
-  ai_output_json JSONB NOT NULL,
+  reasons JSONB DEFAULT '[]'::jsonb,
+  recommended_action TEXT,
+  evaluated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 11. Notifications Table
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  type TEXT DEFAULT 'ALERT',
+  is_read BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. Enable Row Level Security (RLS)
+-- Indexes for Speed
+CREATE INDEX IF NOT EXISTS idx_students_dept ON public.students(department_id);
+CREATE INDEX IF NOT EXISTS idx_students_risk ON public.students(current_risk_level);
+CREATE INDEX IF NOT EXISTS idx_faculty_dept ON public.faculty(department_id);
+CREATE INDEX IF NOT EXISTS idx_subjects_dept ON public.subjects(department_id);
+CREATE INDEX IF NOT EXISTS idx_subjects_fac ON public.subjects(faculty_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_student ON public.attendance(student_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_date ON public.attendance(date);
+CREATE INDEX IF NOT EXISTS idx_marks_student ON public.marks(student_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON public.notifications(user_id);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.faculty ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.courses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.attendance_records ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.academic_policies ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.advisory_records ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.ai_generated_advisories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.marks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.risk_evaluations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
--- 5. RLS Policies
-DROP POLICY IF EXISTS "Public select ai_generated_advisories" ON public.ai_generated_advisories;
-CREATE POLICY "Public select ai_generated_advisories" ON public.ai_generated_advisories FOR ALL USING (true);
+-- Permissive RLS Policies for App Integration
+DROP POLICY IF EXISTS "Public select departments" ON public.departments;
+CREATE POLICY "Public select departments" ON public.departments FOR ALL USING (true);
 
--- Profiles
 DROP POLICY IF EXISTS "Public select profiles" ON public.profiles;
-CREATE POLICY "Public select profiles" ON public.profiles FOR SELECT USING (true);
+CREATE POLICY "Public select profiles" ON public.profiles FOR ALL USING (true);
 
-DROP POLICY IF EXISTS "Users update own profile" ON public.profiles;
-CREATE POLICY "Users update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Public select students" ON public.students;
+CREATE POLICY "Public select students" ON public.students FOR ALL USING (true);
 
--- Students
-DROP POLICY IF EXISTS "Public view students" ON public.students;
-CREATE POLICY "Public view students" ON public.students FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public select faculty" ON public.faculty;
+CREATE POLICY "Public select faculty" ON public.faculty FOR ALL USING (true);
 
-DROP POLICY IF EXISTS "Staff insert students" ON public.students;
-CREATE POLICY "Staff insert students" ON public.students FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Public select subjects" ON public.subjects;
+CREATE POLICY "Public select subjects" ON public.subjects FOR ALL USING (true);
 
-DROP POLICY IF EXISTS "Staff update students" ON public.students;
-CREATE POLICY "Staff update students" ON public.students FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "Public select attendance" ON public.attendance;
+CREATE POLICY "Public select attendance" ON public.attendance FOR ALL USING (true);
 
--- Faculty
-DROP POLICY IF EXISTS "Public view faculty" ON public.faculty;
-CREATE POLICY "Public view faculty" ON public.faculty FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public select marks" ON public.marks;
+CREATE POLICY "Public select marks" ON public.marks FOR ALL USING (true);
 
--- Courses
-DROP POLICY IF EXISTS "Public view courses" ON public.courses;
-CREATE POLICY "Public view courses" ON public.courses FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public select risk_evaluations" ON public.risk_evaluations;
+CREATE POLICY "Public select risk_evaluations" ON public.risk_evaluations FOR ALL USING (true);
 
--- Attendance Records
-DROP POLICY IF EXISTS "Public view attendance" ON public.attendance_records;
-CREATE POLICY "Public view attendance" ON public.attendance_records FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS "Public insert attendance" ON public.attendance_records;
-CREATE POLICY "Public insert attendance" ON public.attendance_records FOR INSERT WITH CHECK (true);
-
--- Academic Policies
-DROP POLICY IF EXISTS "Public view policies" ON public.academic_policies;
-CREATE POLICY "Public view policies" ON public.academic_policies FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS "Staff insert policies" ON public.academic_policies;
-CREATE POLICY "Staff insert policies" ON public.academic_policies FOR INSERT WITH CHECK (true);
-
--- Advisory Records
-DROP POLICY IF EXISTS "Public view advisory" ON public.advisory_records;
-CREATE POLICY "Public view advisory" ON public.advisory_records FOR SELECT USING (true);
-
--- 6. Initial Seed Data Insertion (ON CONFLICT DO NOTHING)
-
--- Profiles
-INSERT INTO public.profiles (id, email, password_hash, full_name, role, department, avatar_url)
-VALUES
-  ('a1b2c3d4-0001-4000-8000-000000000001', 'dean.harrison@university.edu', '$2a$10$7v1b1W.Xg5C0gJvJ4K3J/e8VfPZpQ1Xg5C0gJvJ4K3J/e8VfPZpQ1', 'Dr. Eleanor Harrison', 'DEAN', 'Computer Science', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150'),
-  ('a1b2c3d4-0002-4000-8000-000000000002', 'prof.chen@university.edu', '$2a$10$7v1b1W.Xg5C0gJvJ4K3J/e8VfPZpQ1Xg5C0gJvJ4K3J/e8VfPZpQ1', 'Prof. Marcus Chen', 'FACULTY', 'Computer Science', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'),
-  ('a1b2c3d4-0003-4000-8000-000000000003', 'advisor.sarah@university.edu', '$2a$10$7v1b1W.Xg5C0gJvJ4K3J/e8VfPZpQ1Xg5C0gJvJ4K3J/e8VfPZpQ1', 'Sarah Jenkins, M.Ed.', 'ACADEMIC_ADVISOR', 'Business Administration', 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150'),
-  ('a1b2c3d4-0004-4000-8000-000000000004', 'alex.rivera@student.university.edu', '$2a$10$7v1b1W.Xg5C0gJvJ4K3J/e8VfPZpQ1Xg5C0gJvJ4K3J/e8VfPZpQ1', 'Alex Rivera', 'STUDENT', 'Computer Science', 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150')
-ON CONFLICT (email) DO NOTHING;
-
--- Students
-INSERT INTO public.students (id, user_id, student_code, department, enrollment_year, current_gpa, attendance_rate, credits_earned, credits_required, predicted_risk, status, advisor_notes, gpa_history)
-VALUES
-  ('b2c3d4e5-0001-4000-8000-000000000001', 'a1b2c3d4-0004-4000-8000-000000000004', 'CS-2023-089', 'Computer Science', 2023, 2.34, 68.50, 48, 120, 'HIGH', 'PROBATION', 'Struggling with Data Structures (CS201) and Discrete Math. Attendance dipped below 70%.', '[{"term": "Fall 2023", "gpa": 3.10}, {"term": "Spring 2024", "gpa": 2.70}, {"term": "Fall 2024", "gpa": 2.34}]'::jsonb),
-  ('b2c3d4e5-0002-4000-8000-000000000002', NULL, 'BA-2022-045', 'Business Administration', 2022, 3.88, 96.20, 82, 120, 'LOW', 'ACTIVE', 'High performer. Candidate for Dean’s Honor List and Honors Thesis.', '[{"term": "Fall 2022", "gpa": 3.80}, {"term": "Spring 2023", "gpa": 3.90}, {"term": "Fall 2023", "gpa": 3.85}, {"term": "Spring 2024", "gpa": 3.88}]'::jsonb),
-  ('b2c3d4e5-0003-4000-8000-000000000003', NULL, 'ME-2023-112', 'Mechanical Engineering', 2023, 2.85, 76.00, 42, 128, 'MEDIUM', 'ACTIVE', 'Moderate risk due to Thermodynamics midterm. Requires peer tutoring support.', '[{"term": "Fall 2023", "gpa": 3.00}, {"term": "Spring 2024", "gpa": 2.85}]'::jsonb)
-ON CONFLICT (student_code) DO NOTHING;
-
--- Faculty
-INSERT INTO public.faculty (id, user_id, department, designation, workload_hours, max_workload_hours, teaching_rating, research_publications, courses_taught, evaluation_sentiment)
-VALUES
-  ('c3d4e5f6-0001-4000-8000-000000000001', 'a1b2c3d4-0002-4000-8000-000000000002', 'Computer Science', 'Associate Professor', 38, 40, 4.82, 14, ARRAY['CS101 Intro to CS', 'CS201 Data Structures'], 'Students appreciate interactive coding labs and clear grading rubrics.'),
-  ('c3d4e5f6-0002-4000-8000-000000000002', NULL, 'Business Administration', 'Department Chair & Professor', 42, 40, 4.65, 22, ARRAY['BUS301 Corporate Finance', 'BUS490 Senior Capstone'], 'Strong industry connections; workload slightly above recommended maximum.')
-ON CONFLICT DO NOTHING;
-
--- Academic Policies for RAG
-INSERT INTO public.academic_policies (id, title, category, content)
-VALUES
-  ('d4e5f6a7-0001-4000-8000-000000000001', 'Academic Standing & Probation Policy Section 4.2', 'Academic Standards', 'Any undergraduate student whose cumulative GPA falls below 2.00 or semester GPA falls below 2.25 will be placed on Academic Probation. Students on probation must complete a mandatory Academic Recovery Plan with an Assigned Advisor. Attendance rates below 75% trigger automatic alert warnings to the Dean of Students.'),
-  ('d4e5f6a7-0002-4000-8000-000000000002', 'Course Repeat & Grade Replacement Policy', 'Curriculum & Grading', 'Undergraduate students may repeat up to 4 courses (maximum 16 credit hours) for grade replacement. The higher grade will be calculated into the cumulative GPA, although all course attempts remain permanently on the official transcript.')
-ON CONFLICT DO NOTHING;
+DROP POLICY IF EXISTS "Public select notifications" ON public.notifications;
+CREATE POLICY "Public select notifications" ON public.notifications FOR ALL USING (true);

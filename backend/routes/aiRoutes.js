@@ -6,6 +6,7 @@ import {
   handleFacultyInsights,
   handleExecutiveReport,
   handleDiagnosticQuestions,
+  handleAnalyticsQuery,
   getAiReports,
   verifyAiReport,
   handleGetAuditLogs,
@@ -39,6 +40,7 @@ router.post('/advisor-recommendations', aiLimiter, handleAdvisorRecommendations)
 router.post('/faculty-insights', aiLimiter, handleFacultyInsights);
 router.post('/executive-report', aiLimiter, handleExecutiveReport);
 router.post('/diagnostic-questions', aiLimiter, handleDiagnosticQuestions);
+router.post('/analytics-query', aiLimiter, handleAnalyticsQuery);
 
 // AI Report History & Verification
 router.get('/reports', getAiReports);
