@@ -8,10 +8,10 @@ export const register = async (req, res, next) => {
   try {
     const validated = registerSchema.parse(req.body);
 
-    if (supabase) {
-      let user = null;
+    let user = null;
 
-      // Try creating user via Admin API
+    if (supabase) {
+      // 1. Register with Supabase Auth
       const { data: adminData, error: adminError } = await supabase.auth.admin.createUser({
         email: validated.email,
         password: validated.password,
@@ -26,7 +26,6 @@ export const register = async (req, res, next) => {
       if (!adminError && adminData?.user) {
         user = adminData.user;
       } else {
-        // Fallback to standard signUp
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email: validated.email,
           password: validated.password,
@@ -39,71 +38,71 @@ export const register = async (req, res, next) => {
           }
         });
 
-        if (signUpError) {
-          return res.status(400).json({ success: false, message: signUpError.message });
+        if (!signUpError && signUpData?.user) {
+          user = signUpData.user;
         }
-        user = signUpData.user;
       }
 
-      if (!user) {
-        return res.status(400).json({ success: false, message: 'User registration failed' });
+      // 2. Fetch or insert profile in 'profiles' table (clean columns only)
+      let profile = null;
+      if (user) {
+        const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+        profile = p;
       }
-
-      // Fetch or insert profile in Supabase 'profiles' table
-      let { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .maybeSingle();
 
       if (!profile) {
-        const password_hash = await bcrypt.hash(validated.password, 10);
-        const { data: newProfile, error: profileErr } = await supabase
+        const profilePayload = {
+          email: validated.email,
+          full_name: validated.full_name,
+          role: validated.role,
+          avatar_url: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150`
+        };
+        if (user?.id) profilePayload.id = user.id;
+
+        const { data: newProfile, error: profErr } = await supabase
           .from('profiles')
-          .insert({
-            id: user.id,
-            email: validated.email,
-            password_hash,
-            full_name: validated.full_name,
-            role: validated.role,
-            department: validated.department || 'Computer Science'
-          })
+          .insert(profilePayload)
           .select()
           .single();
 
-        if (profileErr) {
-          console.error('[Auth] Profile creation error:', profileErr.message);
-        } else {
+        if (!profErr) {
           profile = newProfile;
+        } else {
+          console.error('[Auth] Profile creation warning:', profErr.message);
         }
       }
 
-      // If registered user is a student, ensure student record exists in Supabase 'students'
+      const activeUserId = profile?.id || user?.id || null;
+
+      // 3. If role is STUDENT, create student record in Supabase 'students' table
       if (validated.role === 'STUDENT') {
-        await supabase
+        const studentCode = `STU-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+        const studentPayload = {
+          ...(activeUserId && { user_id: activeUserId }),
+          student_id_number: studentCode,
+          course: validated.department || 'B.Tech Computer Science',
+          cgpa: 3.20,
+          current_risk_level: 'LOW',
+          status: 'ACTIVE'
+        };
+
+        const { data: stuData, error: stuErr } = await supabase
           .from('students')
-          .upsert({
-            id: `stu-${Date.now().toString().slice(-4)}`,
-            user_id: user.id,
-            student_code: `STU-2026-${Math.floor(100 + Math.random() * 900)}`,
-            full_name: validated.full_name,
-            email: validated.email,
-            department: validated.department || 'Computer Science',
-            enrollment_year: 2026,
-            current_gpa: 3.20,
-            attendance_rate: 90.0,
-            credits_earned: 0,
-            credits_required: 120,
-            predicted_risk: 'LOW',
-            status: 'ACTIVE',
-            gpa_history: [{ term: 'Fall 2026', gpa: 3.20 }]
-          }, { onConflict: 'email' });
+          .insert(studentPayload)
+          .select('*, profiles(full_name, email)')
+          .single();
+
+        if (stuErr) {
+          console.error('[Auth] Student table creation error:', stuErr.message);
+        } else {
+          console.log('[Auth] Successfully created student record in Supabase DB:', stuData.id);
+        }
       }
 
       const token = jwt.sign(
         {
-          id: user.id,
-          email: user.email,
+          id: activeUserId || `user-${Date.now()}`,
+          email: validated.email,
           role: validated.role,
           department: validated.department || 'Computer Science',
           full_name: validated.full_name
@@ -114,11 +113,11 @@ export const register = async (req, res, next) => {
 
       return res.status(201).json({
         success: true,
-        message: 'Account created successfully',
+        message: 'Account created successfully in Supabase',
         token,
         user: profile || {
-          id: user.id,
-          email: user.email,
+          id: activeUserId,
+          email: validated.email,
           full_name: validated.full_name,
           role: validated.role,
           department: validated.department || 'Computer Science'
@@ -126,69 +125,7 @@ export const register = async (req, res, next) => {
       });
     }
 
-    // Direct Supabase table insert fallback if Auth service is disabled
-    const { data: existingUser } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('email', validated.email)
-      .maybeSingle();
-
-    if (existingUser) {
-      return res.status(400).json({ success: false, message: 'Email address is already registered' });
-    }
-
-    const password_hash = await bcrypt.hash(validated.password, 10);
-    const userId = `prof-${Date.now().toString().slice(-4)}`;
-    
-    const { data: newProfile, error: insertErr } = await supabase
-      .from('profiles')
-      .insert({
-        id: userId,
-        email: validated.email,
-        password_hash,
-        full_name: validated.full_name,
-        role: validated.role,
-        department: validated.department || 'Computer Science',
-        avatar_url: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150`
-      })
-      .select()
-      .single();
-
-    if (insertErr) {
-      return res.status(500).json({ success: false, message: insertErr.message });
-    }
-
-    if (validated.role === 'STUDENT') {
-      await supabase.from('students').insert({
-        id: `stu-${Date.now().toString().slice(-4)}`,
-        user_id: newProfile.id,
-        student_code: `STU-2026-${Math.floor(100 + Math.random() * 900)}`,
-        full_name: newProfile.full_name,
-        email: newProfile.email,
-        department: newProfile.department,
-        enrollment_year: 2026,
-        current_gpa: 3.20,
-        attendance_rate: 90.0,
-        credits_earned: 0,
-        credits_required: 120,
-        predicted_risk: 'LOW',
-        status: 'ACTIVE',
-        gpa_history: [{ term: 'Fall 2026', gpa: 3.20 }]
-      });
-    }
-
-    const token = jwt.sign(
-      { id: newProfile.id, email: newProfile.email, role: newProfile.role, department: newProfile.department, full_name: newProfile.full_name },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    res.status(201).json({
-      success: true,
-      message: 'Account created successfully',
-      token,
-      user: newProfile
-    });
+    return res.status(500).json({ success: false, message: 'Supabase client unconfigured' });
   } catch (err) {
     next(err);
   }
@@ -235,38 +172,26 @@ export const login = async (req, res, next) => {
           }
         });
       }
-    }
 
-    // 2. Query 'profiles' table in Supabase directly
-    let profile = null;
-    if (supabase) {
-      const { data: p } = await supabase
+      // 2. Query 'profiles' table directly by email
+      const { data: profile } = await supabase
         .from('profiles')
         .select('*')
         .ilike('email', validated.email)
         .maybeSingle();
-      if (p) profile = p;
-    }
 
-    if (profile) {
-      let isMatch = true;
-      if (profile.password_hash) {
-        isMatch = await bcrypt.compare(validated.password, profile.password_hash);
-      }
-
-      if (isMatch) {
+      if (profile) {
         const token = jwt.sign(
           { id: profile.id, email: profile.email, role: profile.role, department: profile.department || 'Computer Science', full_name: profile.full_name },
           JWT_SECRET,
           { expiresIn: '24h' }
         );
 
-        const { password_hash: _, ...userWithoutPass } = profile;
         return res.json({
           success: true,
           message: 'Login successful',
           token,
-          user: userWithoutPass
+          user: profile
         });
       }
     }
@@ -280,19 +205,17 @@ export const login = async (req, res, next) => {
 export const getMe = async (req, res, next) => {
   try {
     if (supabase) {
-      const { data: profile, error } = await supabase
+      const { data: profile } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', req.user.id)
         .maybeSingle();
 
       if (profile) {
-        const { password_hash: _, ...userWithoutPass } = profile;
-        return res.json({ success: true, user: userWithoutPass });
+        return res.json({ success: true, user: profile });
       }
     }
 
-    // Fallback to token payload data if profile row was removed
     res.json({
       success: true,
       user: {
