@@ -1,20 +1,40 @@
 import { generateReportSchema } from '../validators/schemas.js';
 import { generateExecutiveReport } from '../services/geminiService.js';
-import { mockStore } from '../services/mockStore.js';
+import { supabase } from '../config/db.js';
 
 export const generateReport = async (req, res, next) => {
   try {
     const validated = generateReportSchema.parse(req.body);
 
-    const deptStudents = mockStore.students.filter(s => validated.department === 'ALL' || s.department === validated.department);
-    const deptFaculty = mockStore.faculty.filter(f => validated.department === 'ALL' || f.department === validated.department);
-    const deptCourses = mockStore.courses.filter(c => validated.department === 'ALL' || c.department === validated.department);
+    let studentQuery = supabase.from('students').select('*');
+    let facultyQuery = supabase.from('faculty').select('*');
+    let courseQuery = supabase.from('courses').select('*');
+
+    if (validated.department && validated.department !== 'ALL') {
+      studentQuery = studentQuery.eq('department', validated.department);
+      facultyQuery = facultyQuery.eq('department', validated.department);
+      courseQuery = courseQuery.eq('department', validated.department);
+    }
+
+    const [{ data: students }, { data: faculty }, { data: courses }] = await Promise.all([
+      studentQuery,
+      facultyQuery,
+      courseQuery
+    ]);
+
+    const deptStudents = students || [];
+    const deptFaculty = faculty || [];
+    const deptCourses = courses || [];
+
+    const totalGpa = deptStudents.reduce((a, s) => a + Number(s.current_gpa || 0), 0);
+    const averageGpa = deptStudents.length > 0 ? (totalGpa / deptStudents.length).toFixed(2) : '3.10';
+    const highRiskCount = deptStudents.filter(s => s.predicted_risk === 'HIGH').length;
 
     const departmentData = {
       department: validated.department,
       studentCount: deptStudents.length,
-      averageGpa: deptStudents.length ? (deptStudents.reduce((a, s) => a + s.current_gpa, 0) / deptStudents.length).toFixed(2) : 3.10,
-      highRiskCount: deptStudents.filter(s => s.predicted_risk === 'HIGH').length,
+      averageGpa,
+      highRiskCount,
       facultyCount: deptFaculty.length,
       coursesTracked: deptCourses.length
     };

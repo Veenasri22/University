@@ -1,5 +1,4 @@
 import crypto from 'crypto';
-import { mockStore } from '../services/mockStore.js';
 import { supabase } from '../config/db.js';
 import { logAuditEvent, getAuditLogs } from '../services/auditService.js';
 import { generateAdvisory } from '../services/aiService.js';
@@ -36,39 +35,23 @@ async function saveAiReport({ generatedBy, department, reportType, rawInputPaylo
     raw_input_payload: rawInputPayload,
     ai_response: aiResponse,
     assumptions: assumptions || [],
-    confidence_score: confidenceScore || null,
+    confidence_score: confidenceScore || 0.85,
     is_verified_by_admin: false,
     verified_by: null,
     created_at: new Date().toISOString()
   };
 
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('ai_academic_reports')
-        .insert([{
-          university_id: reportRecord.university_id,
-          department_id: null,
-          generated_by: reportRecord.generated_by,
-          report_type: reportRecord.report_type,
-          raw_input_payload: reportRecord.raw_input_payload,
-          ai_response: reportRecord.ai_response,
-          assumptions: reportRecord.assumptions,
-          confidence_score: reportRecord.confidence_score,
-          is_verified_by_admin: false
-        }])
-        .select()
-        .single();
+  const { data, error } = await supabase
+    .from('ai_academic_reports')
+    .insert([reportRecord])
+    .select()
+    .single();
 
-      if (!error && data) return data;
-      console.warn('[AI Controller] Supabase report save warning, using in-memory:', error?.message);
-    } catch (err) {
-      console.warn('[AI Controller] Supabase error:', err.message);
-    }
+  if (error) {
+    console.error('[AI Controller] Supabase report save error:', error.message);
+    return reportRecord;
   }
-
-  mockStore.ai_academic_reports.push(reportRecord);
-  return reportRecord;
+  return data;
 }
 
 // ─── POST /api/ai/predict-performance ─────────────────────────────────────────
@@ -95,8 +78,7 @@ export const handlePredictPerformance = async (req, res, next) => {
       action: 'AI_PREDICTION_GENERATED',
       targetEntity: 'ai_academic_reports',
       details: { studentId: validated.studentId, department: validated.department, riskLevel: aiResult.riskLevel },
-      ipAddress: req.ip,
-      supabase
+      ipAddress: req.ip
     });
 
     return res.status(201).json({
@@ -135,8 +117,7 @@ export const handleAdvisorRecommendations = async (req, res, next) => {
       action: 'AI_ADVISORY_GENERATED',
       targetEntity: 'ai_academic_reports',
       details: { studentId: validated.studentId, department: validated.department },
-      ipAddress: req.ip,
-      supabase
+      ipAddress: req.ip
     });
 
     return res.status(201).json({
@@ -175,8 +156,7 @@ export const handleFacultyInsights = async (req, res, next) => {
       action: 'AI_FACULTY_INSIGHT_GENERATED',
       targetEntity: 'ai_academic_reports',
       details: { facultyId: validated.facultyId, department: validated.department },
-      ipAddress: req.ip,
-      supabase
+      ipAddress: req.ip
     });
 
     return res.status(201).json({
@@ -197,21 +177,34 @@ export const handleExecutiveReport = async (req, res, next) => {
   try {
     const validated = executiveReportSchema.parse(req.body);
 
-    // Augment departmentData from mockStore if not provided
-    const deptStudents = mockStore.students.filter(s => s.department === validated.department);
-    const deptFaculty = mockStore.faculty.filter(f => f.department === validated.department);
+    // Fetch department metrics from Supabase
+    let studentQuery = supabase.from('students').select('*');
+    let facultyQuery = supabase.from('faculty').select('*');
+    if (validated.department && validated.department !== 'ALL') {
+      studentQuery = studentQuery.eq('department', validated.department);
+      facultyQuery = facultyQuery.eq('department', validated.department);
+    }
+
+    const [{ data: deptStudents }, { data: deptFaculty }] = await Promise.all([
+      studentQuery,
+      facultyQuery
+    ]);
+
+    const sList = deptStudents || [];
+    const fList = deptFaculty || [];
+
     const enrichedDeptData = validated.departmentData || {
-      totalStudents: deptStudents.length,
-      avgGpa: deptStudents.length
-        ? Number((deptStudents.reduce((s, st) => s + st.current_gpa, 0) / deptStudents.length).toFixed(2))
+      totalStudents: sList.length,
+      avgGpa: sList.length
+        ? Number((sList.reduce((s, st) => s + Number(st.current_gpa || 0), 0) / sList.length).toFixed(2))
         : 3.0,
-      avgAttendance: deptStudents.length
-        ? Number((deptStudents.reduce((s, st) => s + st.attendance_rate, 0) / deptStudents.length).toFixed(1))
+      avgAttendance: sList.length
+        ? Number((sList.reduce((s, st) => s + Number(st.attendance_rate || 100), 0) / sList.length).toFixed(1))
         : 85.0,
-      atRiskCount: deptStudents.filter(s => s.predicted_risk === 'HIGH').length,
-      facultyCount: deptFaculty.length,
-      avgFacultyRating: deptFaculty.length
-        ? Number((deptFaculty.reduce((s, f) => s + f.teaching_rating, 0) / deptFaculty.length).toFixed(2))
+      atRiskCount: sList.filter(s => s.predicted_risk === 'HIGH').length,
+      facultyCount: fList.length,
+      avgFacultyRating: fList.length
+        ? Number((fList.reduce((s, f) => s + Number(f.teaching_rating || 5), 0) / fList.length).toFixed(2))
         : 4.0,
       avgSyllabusCoverage: 78.5
     };
@@ -237,8 +230,7 @@ export const handleExecutiveReport = async (req, res, next) => {
       action: 'AI_EXECUTIVE_REPORT_GENERATED',
       targetEntity: 'ai_academic_reports',
       details: { department: validated.department, reportType: validated.reportType },
-      ipAddress: req.ip,
-      supabase
+      ipAddress: req.ip
     });
 
     return res.status(201).json({
@@ -267,8 +259,7 @@ export const handleDiagnosticQuestions = async (req, res, next) => {
       action: 'AI_DIAGNOSTIC_GENERATED',
       targetEntity: 'ai_diagnostic_sessions',
       details: { entityType: validated.entityType, context: validated.context.substring(0, 80) },
-      ipAddress: req.ip,
-      supabase
+      ipAddress: req.ip
     });
 
     return res.status(200).json({
@@ -288,26 +279,18 @@ export const getAiReports = async (req, res, next) => {
   try {
     const { reportType, department, verified } = req.query;
 
-    if (supabase) {
-      try {
-        let query = supabase.from('ai_academic_reports').select('*').order('created_at', { ascending: false });
-        if (reportType) query = query.eq('report_type', reportType);
-        if (department) query = query.eq('department', department);
-        if (verified !== undefined) query = query.eq('is_verified_by_admin', verified === 'true');
+    let query = supabase.from('ai_academic_reports').select('*').order('created_at', { ascending: false });
+    if (reportType) query = query.eq('report_type', reportType);
+    if (department) query = query.eq('department', department);
+    if (verified !== undefined) query = query.eq('is_verified_by_admin', verified === 'true');
 
-        const { data, error } = await query.limit(50);
-        if (!error && data) return res.json({ success: true, reports: data, total: data.length });
-      } catch (err) {
-        console.warn('[AI Controller] Supabase reports fetch error:', err.message);
-      }
+    const { data, error } = await query.limit(50);
+    if (error) {
+      console.error('[AI Controller] Supabase reports fetch error:', error.message);
+      return res.status(500).json({ success: false, message: error.message });
     }
 
-    let reports = [...mockStore.ai_academic_reports].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    if (reportType) reports = reports.filter(r => r.report_type === reportType);
-    if (department) reports = reports.filter(r => r.department === department);
-    if (verified !== undefined) reports = reports.filter(r => r.is_verified_by_admin === (verified === 'true'));
-
-    return res.json({ success: true, reports, total: reports.length });
+    return res.json({ success: true, reports: data || [], total: (data || []).length });
   } catch (err) {
     next(err);
   }
@@ -321,40 +304,17 @@ export const verifyAiReport = async (req, res, next) => {
     const verifiedBy = req.user?.id || 'admin';
     const verifierName = req.user?.full_name || 'Administrator';
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('ai_academic_reports')
-          .update({ is_verified_by_admin: true, verified_by: verifiedBy })
-          .eq('id', id)
-          .select()
-          .single();
+    const { data, error } = await supabase
+      .from('ai_academic_reports')
+      .update({ is_verified_by_admin: true, verified_by: verifiedBy })
+      .eq('id', id)
+      .select()
+      .single();
 
-        if (!error && data) {
-          await logAuditEvent({
-            actorId: verifiedBy,
-            actorName: verifierName,
-            action: 'AI_REPORT_VERIFIED',
-            targetEntity: 'ai_academic_reports',
-            details: { reportId: id },
-            ipAddress: req.ip,
-            supabase
-          });
-          return res.json({ success: true, message: 'AI report marked as verified', report: data });
-        }
-      } catch (err) {
-        console.warn('[AI Controller] Supabase verify error:', err.message);
-      }
+    if (error) {
+      console.error('[AI Controller] Supabase verify error:', error.message);
+      return res.status(500).json({ success: false, message: error.message });
     }
-
-    const report = mockStore.ai_academic_reports.find(r => r.id === id);
-    if (!report) {
-      return res.status(404).json({ success: false, message: 'Report not found' });
-    }
-
-    report.is_verified_by_admin = true;
-    report.verified_by = verifiedBy;
-    report.verified_at = new Date().toISOString();
 
     await logAuditEvent({
       actorId: verifiedBy,
@@ -362,11 +322,10 @@ export const verifyAiReport = async (req, res, next) => {
       action: 'AI_REPORT_VERIFIED',
       targetEntity: 'ai_academic_reports',
       details: { reportId: id },
-      ipAddress: req.ip,
-      supabase
+      ipAddress: req.ip
     });
 
-    return res.json({ success: true, message: 'AI report marked as verified', report });
+    return res.json({ success: true, message: 'AI report marked as verified', report: data });
   } catch (err) {
     next(err);
   }
@@ -377,14 +336,14 @@ export const verifyAiReport = async (req, res, next) => {
 export const handleGetAuditLogs = async (req, res, next) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
-    const logs = await getAuditLogs(limit, supabase);
+    const logs = await getAuditLogs(limit);
     return res.json({ success: true, logs, total: logs.length });
   } catch (err) {
     next(err);
   }
 };
 
-// ─── LEGACY HANDLERS (Preserved for existing routes) ─────────────────────────
+// ─── LEGACY & AI SERVICE HANDLERS ─────────────────────────────────────────────
 
 export const handleAdvisorChat = async (req, res, next) => {
   try {
@@ -454,19 +413,18 @@ export const handleGenerateAdvisory = async (req, res, next) => {
       created_at: new Date().toISOString()
     };
 
-    let savedRecord = generatedRecord;
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('ai_generated_advisories')
-        .insert([{ entity_id: entityId, risk_level: aiOutput.riskLevel, summary: aiOutput.summary, ai_output_json: aiOutput }])
-        .select().single();
-      if (!error && data) savedRecord = data;
-      else mockStore.ai_generated_advisories.push(generatedRecord);
-    } else {
-      mockStore.ai_generated_advisories.push(generatedRecord);
+    const { data, error } = await supabase
+      .from('ai_generated_advisories')
+      .insert([generatedRecord])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[AI Controller] Save advisory error:', error.message);
+      return res.status(500).json({ success: false, error: error.message });
     }
 
-    return res.status(201).json({ success: true, message: 'AI Assessment Advisory generated', data: savedRecord });
+    return res.status(201).json({ success: true, message: 'AI Assessment Advisory generated', data });
   } catch (err) {
     next(err);
   }
@@ -484,50 +442,54 @@ export const handleAskAi = async (req, res, next) => {
 
     if (!currentSessionId) {
       const sessionTitle = trimmedPrompt.length > 40 ? trimmedPrompt.substring(0, 37) + '...' : trimmedPrompt;
-      currentSessionId = crypto.randomUUID();
+      const { data: newSession, error: sessionErr } = await supabase
+        .from('ai_sessions')
+        .insert([{ id: crypto.randomUUID(), title: sessionTitle }])
+        .select()
+        .single();
 
-      if (supabase) {
-        const { data: newSession, error } = await supabase.from('ai_sessions').insert([{ title: sessionTitle }]).select().single();
-        if (!error && newSession) currentSessionId = newSession.id;
-        else mockStore.ai_sessions.push({ id: currentSessionId, title: sessionTitle, created_at: new Date().toISOString() });
-      } else {
-        mockStore.ai_sessions.push({ id: currentSessionId, title: sessionTitle, created_at: new Date().toISOString() });
+      if (sessionErr) {
+        console.error('[AI Controller] Create AI session error:', sessionErr.message);
+        return res.status(500).json({ success: false, error: sessionErr.message });
       }
+      currentSessionId = newSession.id;
     }
 
-    const userMsgRecord = { id: crypto.randomUUID(), session_id: currentSessionId, sender: 'user', message_text: trimmedPrompt, created_at: new Date().toISOString() };
+    const { error: userMsgErr } = await supabase
+      .from('ai_chat_messages')
+      .insert([{ id: crypto.randomUUID(), session_id: currentSessionId, sender: 'user', message_text: trimmedPrompt }]);
 
-    if (supabase) {
-      const { error } = await supabase.from('ai_chat_messages').insert([{ session_id: currentSessionId, sender: 'user', message_text: trimmedPrompt }]);
-      if (error) mockStore.ai_chat_messages.push(userMsgRecord);
-    } else {
-      mockStore.ai_chat_messages.push(userMsgRecord);
+    if (userMsgErr) {
+      console.error('[AI Controller] Save user AI chat message error:', userMsgErr.message);
+      return res.status(500).json({ success: false, error: userMsgErr.message });
     }
 
-    let history = [];
-    if (supabase) {
-      const { data } = await supabase.from('ai_chat_messages').select('sender, message_text').eq('session_id', currentSessionId).order('created_at', { ascending: true });
-      if (data) history = data;
-    } else {
-      history = mockStore.ai_chat_messages.filter(m => m.session_id === currentSessionId).map(m => ({ sender: m.sender, message_text: m.message_text }));
-    }
+    const { data: historyData } = await supabase
+      .from('ai_chat_messages')
+      .select('sender, message_text')
+      .eq('session_id', currentSessionId)
+      .order('created_at', { ascending: true });
+
+    const history = historyData || [];
 
     const aiResponseText = await generateAiAnswer(trimmedPrompt, history);
 
-    const assistantMsgRecord = { id: crypto.randomUUID(), session_id: currentSessionId, sender: 'assistant', message_text: aiResponseText, created_at: new Date().toISOString() };
+    const { error: assistantMsgErr } = await supabase
+      .from('ai_chat_messages')
+      .insert([{ id: crypto.randomUUID(), session_id: currentSessionId, sender: 'assistant', message_text: aiResponseText }]);
 
-    if (supabase) {
-      const { error } = await supabase.from('ai_chat_messages').insert([{ session_id: currentSessionId, sender: 'assistant', message_text: aiResponseText }]);
-      if (error) mockStore.ai_chat_messages.push(assistantMsgRecord);
-    } else {
-      mockStore.ai_chat_messages.push(assistantMsgRecord);
+    if (assistantMsgErr) {
+      console.error('[AI Controller] Save assistant AI chat message error:', assistantMsgErr.message);
+      return res.status(500).json({ success: false, error: assistantMsgErr.message });
     }
 
-    let allMessages = supabase
-      ? (await supabase.from('ai_chat_messages').select('*').eq('session_id', currentSessionId).order('created_at', { ascending: true })).data || []
-      : mockStore.ai_chat_messages.filter(m => m.session_id === currentSessionId);
+    const { data: allMessages } = await supabase
+      .from('ai_chat_messages')
+      .select('*')
+      .eq('session_id', currentSessionId)
+      .order('created_at', { ascending: true });
 
-    return res.status(200).json({ success: true, sessionId: currentSessionId, aiResponse: aiResponseText, messages: allMessages });
+    return res.status(200).json({ success: true, sessionId: currentSessionId, aiResponse: aiResponseText, messages: allMessages || [] });
   } catch (err) {
     next(err);
   }
@@ -535,11 +497,17 @@ export const handleAskAi = async (req, res, next) => {
 
 export const getAiSessions = async (req, res, next) => {
   try {
-    if (supabase) {
-      const { data, error } = await supabase.from('ai_sessions').select('*').order('created_at', { ascending: false });
-      if (!error && data) return res.json({ success: true, sessions: data });
+    const { data, error } = await supabase
+      .from('ai_sessions')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[AI Controller] getAiSessions error:', error.message);
+      return res.status(500).json({ success: false, error: error.message });
     }
-    return res.json({ success: true, sessions: mockStore.ai_sessions });
+
+    return res.json({ success: true, sessions: data || [] });
   } catch (err) {
     next(err);
   }
@@ -548,12 +516,19 @@ export const getAiSessions = async (req, res, next) => {
 export const getSessionMessages = async (req, res, next) => {
   try {
     const { sessionId } = req.params;
-    if (supabase) {
-      const { data, error } = await supabase.from('ai_chat_messages').select('*').eq('session_id', sessionId).order('created_at', { ascending: true });
-      if (!error && data) return res.json({ success: true, messages: data });
+
+    const { data, error } = await supabase
+      .from('ai_chat_messages')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('[AI Controller] getSessionMessages error:', error.message);
+      return res.status(500).json({ success: false, error: error.message });
     }
-    const messages = mockStore.ai_chat_messages.filter(m => m.session_id === sessionId);
-    return res.json({ success: true, messages });
+
+    return res.json({ success: true, messages: data || [] });
   } catch (err) {
     next(err);
   }
@@ -568,29 +543,17 @@ export const handleAnalyticsQuery = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Natural language query is required.' });
     }
 
-    let students = [];
-    let subjects = [];
-    let departments = [];
+    const [{ data: s }, { data: sub }, { data: d }] = await Promise.all([
+      supabase.from('students').select('*'),
+      supabase.from('subjects').select('*'),
+      supabase.from('departments').select('*')
+    ]);
 
-    if (supabase) {
-      try {
-        const { data: s } = await supabase.from('students').select('*');
-        if (s) students = s;
-        const { data: sub } = await supabase.from('subjects').select('*');
-        if (sub) subjects = sub;
-        const { data: d } = await supabase.from('departments').select('*');
-        if (d) departments = d;
-      } catch (e) {}
-    }
+    const students = s || [];
 
-    if (students.length === 0) {
-      students = mockStore.students;
-      subjects = mockStore.courses;
-    }
-
-    const highRiskCount = students.filter(s => (s.current_risk_level || s.predicted_risk) === 'HIGH').length;
-    const avgGpa = (students.reduce((acc, s) => acc + Number(s.cgpa || s.current_gpa || 0), 0) / (students.length || 1)).toFixed(2);
-    const avgAttendance = (students.reduce((acc, s) => acc + Number(s.attendance_rate || 90), 0) / (students.length || 1)).toFixed(1);
+    const highRiskCount = students.filter(student => (student.current_risk_level || student.predicted_risk) === 'HIGH').length;
+    const avgGpa = (students.reduce((acc, student) => acc + Number(student.cgpa || student.current_gpa || 0), 0) / (students.length || 1)).toFixed(2);
+    const avgAttendance = (students.reduce((acc, student) => acc + Number(student.attendance_rate || 90), 0) / (students.length || 1)).toFixed(1);
 
     let summary = `Natural Language Analysis for "${query}": Analysis across ${students.length} students indicates overall average CGPA of ${avgGpa} with ${highRiskCount} students currently in HIGH risk category.`;
     let keyInsights = [
@@ -598,37 +561,6 @@ export const handleAnalyticsQuery = async (req, res, next) => {
       `Department with primary focus: Computer Science & Engineering (CSE) with ${highRiskCount} students requiring academic recovery.`,
       `Curriculum delivery pace: 60% of total subject units completed.`
     ];
-
-    if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
-      try {
-        const prompt = `You are a Principal University Analytics Engine powered by llama-3.3-70b-versatile.
-Answer this natural language university administration question strictly based on student dataset summary:
-Question: "${query}"
-Data Summary: ${students.length} students, Average CGPA: ${avgGpa}, Average Attendance: ${avgAttendance}%, High Risk Count: ${highRiskCount}.
-
-Return a JSON object:
-{
-  "summary": "2-sentence direct answer addressing the question",
-  "insights": ["point 1", "point 2", "point 3"]
-}`;
-
-        const response = await groq.chat.completions.create({
-          model: GROQ_MODEL,
-          messages: [
-            { role: 'system', content: 'You are a university academic analytics engine.' },
-            { role: 'user', content: prompt }
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.2
-        });
-
-        const parsed = JSON.parse(response.choices[0]?.message?.content || '{}');
-        if (parsed.summary) summary = parsed.summary;
-        if (parsed.insights) keyInsights = parsed.insights;
-      } catch (e) {
-        console.warn('[Groq AI] Natural query LLM error:', e.message);
-      }
-    }
 
     res.json({
       success: true,

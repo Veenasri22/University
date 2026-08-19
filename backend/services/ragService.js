@@ -1,36 +1,28 @@
-import { mockStore } from './mockStore.js';
 import { supabase } from '../config/db.js';
 import { groq, GROQ_MODEL } from '../config/groq.js';
 
 export async function searchPolicies({ query, department }) {
-  // If Supabase text search is available
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('academic_policies')
-        .select('*')
-        .ilike('content', `%${query}%`);
-      
-      if (!error && data && data.length > 0) {
-        return data;
-      }
-    } catch (e) {
-      console.warn('[RAG Service] Supabase query fallback:', e.message);
-    }
+  let results = [];
+
+  const { data, error } = await supabase
+    .from('policies')
+    .select('*')
+    .ilike('content', `%${query}%`);
+
+  if (!error && data && data.length > 0) {
+    results = data;
+  } else {
+    // If no exact ILIKE matches found, get top policies
+    const { data: fallbackDocs } = await supabase
+      .from('policies')
+      .select('*')
+      .limit(5);
+    results = fallbackDocs || [];
   }
-
-  // Smart local RAG fallback matching keywords
-  const terms = query.toLowerCase().split(' ').filter(t => t.length > 2);
-  const matched = mockStore.policies.filter(pol => {
-    const text = (pol.title + ' ' + pol.category + ' ' + pol.content).toLowerCase();
-    return terms.some(term => text.includes(term));
-  });
-
-  const results = matched.length > 0 ? matched : mockStore.policies.slice(0, 2);
 
   // If Groq API is available, generate contextual answer over matched documents
   let aiAnswer = null;
-  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
+  if (results.length > 0 && process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
     try {
       const contextText = results.map(r => `Document: ${r.title}\nCategory: ${r.category}\nContent: ${r.content}`).join('\n\n');
       const response = await groq.chat.completions.create({
@@ -47,9 +39,11 @@ export async function searchPolicies({ query, department }) {
     }
   }
 
-  if (!aiAnswer) {
+  if (!aiAnswer && results.length > 0) {
     const topDoc = results[0];
     aiAnswer = `According to **${topDoc.title}** (${topDoc.category}):\n\n"${topDoc.content}"\n\n*Citation: Section ${topDoc.id.toUpperCase()} - University Academic Code.*`;
+  } else if (!aiAnswer) {
+    aiAnswer = 'No policy document matching your query was found in the institution database.';
   }
 
   return {
@@ -68,14 +62,16 @@ export async function uploadPolicy({ title, category, content }) {
     created_at: new Date().toISOString()
   };
 
-  if (supabase) {
-    try {
-      await supabase.from('academic_policies').insert([newPolicy]);
-    } catch (e) {
-      console.warn('[RAG Service] Supabase insert warning:', e.message);
-    }
+  const { data, error } = await supabase
+    .from('policies')
+    .insert([newPolicy])
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[RAG Service] Supabase insert error:', error.message);
+    throw new Error(error.message);
   }
 
-  mockStore.policies.unshift(newPolicy);
-  return newPolicy;
+  return data;
 }

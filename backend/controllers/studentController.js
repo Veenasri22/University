@@ -1,5 +1,4 @@
 import { supabase } from '../config/db.js';
-import { mockStore } from '../services/mockStore.js';
 import { studentCreateSchema, studentPerformanceUpdateSchema } from '../validators/schemas.js';
 import { predictStudentRisk } from '../services/geminiService.js';
 
@@ -14,45 +13,30 @@ export const getStudents = async (req, res, next) => {
   try {
     const { department, riskLevel, search } = req.query;
 
-    let students = [];
-    let isSupabaseActive = false;
+    let query = supabase
+      .from('students')
+      .select('*, profiles(full_name, email)')
+      .order('created_at', { ascending: false });
 
-    if (supabase) {
-      try {
-        let query = supabase.from('students').select('*, profiles(full_name, email)').order('created_at', { ascending: false });
-
-        if (department && department !== 'ALL') {
-          query = query.eq('department', department);
-        }
-
-        if (riskLevel && riskLevel !== 'ALL') {
-          query = query.eq('predicted_risk', riskLevel);
-        }
-
-        const { data, error } = await query;
-        if (!error && data) {
-          isSupabaseActive = true;
-          students = data.map(s => ({
-            ...s,
-            full_name: s.profiles?.full_name || s.full_name || `Student ${s.student_code}`,
-            email: s.profiles?.email || s.email || `${s.student_code.toLowerCase()}@student.university.edu`
-          }));
-        }
-      } catch (err) {
-        console.warn('[studentController] Supabase fetch warning:', err.message);
-      }
+    if (department && department !== 'ALL') {
+      query = query.eq('department', department);
     }
 
-    // Only fall back to mockStore if Supabase client is completely unavailable/unconfigured
-    if (!isSupabaseActive && !supabase) {
-      students = [...mockStore.students];
-      if (department && department !== 'ALL') {
-        students = students.filter(s => s.department === department);
-      }
-      if (riskLevel && riskLevel !== 'ALL') {
-        students = students.filter(s => s.predicted_risk === riskLevel);
-      }
+    if (riskLevel && riskLevel !== 'ALL') {
+      query = query.eq('predicted_risk', riskLevel);
     }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('[studentController] Supabase fetch error:', error.message);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+
+    let students = (data || []).map(s => ({
+      ...s,
+      full_name: s.profiles?.full_name || s.full_name || `Student ${s.student_code}`,
+      email: s.profiles?.email || s.email || `${s.student_code.toLowerCase()}@student.university.edu`
+    }));
 
     if (search) {
       const q = search.toLowerCase();
@@ -77,63 +61,44 @@ export const getStudentById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    let student = null;
-    let advisoryLogs = [];
-    let attendanceLogs = [];
-    let isSupabaseActive = false;
+    const { data, error } = await supabase
+      .from('students')
+      .select('*, profiles(full_name, email)')
+      .or(`id.eq.${id},student_code.eq.${id}`)
+      .maybeSingle();
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('students')
-          .select('*, profiles(full_name, email)')
-          .or(`id.eq.${id},student_code.eq.${id}`)
-          .maybeSingle();
-
-        if (!error && data) {
-          isSupabaseActive = true;
-          student = {
-            ...data,
-            full_name: data.profiles?.full_name || data.full_name || `Student ${data.student_code}`,
-            email: data.profiles?.email || data.email || `${data.student_code.toLowerCase()}@student.university.edu`
-          };
-
-          // Fetch advisory logs
-          const { data: adv } = await supabase
-            .from('advisory_records')
-            .select('*')
-            .eq('student_id', student.id);
-          if (adv) advisoryLogs = adv;
-
-          // Fetch attendance logs
-          const { data: att } = await supabase
-            .from('attendance_records')
-            .select('*')
-            .or(`student_id.eq.${student.id},student_name.eq.${student.full_name}`);
-          if (att) attendanceLogs = att;
-        }
-      } catch (err) {
-        console.warn('[studentController] Supabase single student fetch warning:', err.message);
-      }
+    if (error) {
+      console.error('[studentController] Supabase single fetch error:', error.message);
+      return res.status(500).json({ success: false, message: error.message });
     }
 
-    if (!student && (!supabase || !isSupabaseActive)) {
-      student = mockStore.students.find(s => s.id === id || s.student_code === id);
-      if (student) {
-        advisoryLogs = mockStore.advisory_records.filter(r => r.student_id === student.id);
-        attendanceLogs = mockStore.attendance_logs.filter(a => a.student_name === student.full_name);
-      }
-    }
-
-    if (!student) {
+    if (!data) {
       return res.status(404).json({ success: false, message: 'Student record not found' });
     }
+
+    const student = {
+      ...data,
+      full_name: data.profiles?.full_name || data.full_name || `Student ${data.student_code}`,
+      email: data.profiles?.email || data.email || `${data.student_code.toLowerCase()}@student.university.edu`
+    };
+
+    // Fetch advisory logs
+    const { data: adv } = await supabase
+      .from('advisory_records')
+      .select('*')
+      .eq('student_id', student.id);
+
+    // Fetch attendance logs
+    const { data: att } = await supabase
+      .from('attendance_logs')
+      .select('*')
+      .or(`student_id.eq.${student.id},student_name.eq.${student.full_name}`);
 
     res.json({
       success: true,
       student,
-      advisoryLogs,
-      attendanceLogs
+      advisoryLogs: adv || [],
+      attendanceLogs: att || []
     });
   } catch (err) {
     next(err);
@@ -148,28 +113,25 @@ export const createStudent = async (req, res, next) => {
 
     let userId = null;
 
-    if (supabase) {
-      try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .insert({
-            email: validated.email,
-            full_name: validated.full_name,
-            role: 'STUDENT',
-            department: validated.department
-          })
-          .select()
-          .single();
+    const { data: profile } = await supabase
+      .from('profiles')
+      .insert({
+        email: validated.email,
+        full_name: validated.full_name,
+        role: 'STUDENT',
+        department: validated.department
+      })
+      .select()
+      .single();
 
-        if (profile) userId = profile.id;
-      } catch (err) {
-        console.warn('[studentController] Profile creation warning:', err.message);
-      }
-    }
+    if (profile) userId = profile.id;
 
     const newStudentData = {
+      id: `stu-${Date.now().toString().slice(-4)}`,
       ...(userId && { user_id: userId }),
       student_code: validated.student_code,
+      full_name: validated.full_name,
+      email: validated.email,
       department: validated.department,
       enrollment_year: Number(validated.enrollment_year),
       current_gpa: Number(validated.current_gpa),
@@ -181,47 +143,22 @@ export const createStudent = async (req, res, next) => {
       gpa_history: [{ term: 'Fall 2026', gpa: Number(validated.current_gpa) }]
     };
 
-    let createdStudent = null;
+    const { data, error } = await supabase
+      .from('students')
+      .insert(newStudentData)
+      .select('*, profiles(full_name, email)')
+      .single();
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('students')
-          .insert(newStudentData)
-          .select('*, profiles(full_name, email)')
-          .single();
-
-        if (!error && data) {
-          createdStudent = {
-            ...data,
-            full_name: data.profiles?.full_name || validated.full_name,
-            email: data.profiles?.email || validated.email
-          };
-          console.log('[Supabase] Created new student:', data.id);
-        } else if (error) {
-          console.error('[Supabase] Create student error:', error.message);
-        }
-      } catch (err) {
-        console.warn('[studentController] Supabase create student fallback:', err.message);
-      }
+    if (error) {
+      console.error('[Supabase] Create student error:', error.message);
+      return res.status(500).json({ success: false, message: error.message });
     }
 
-    if (!createdStudent) {
-      createdStudent = {
-        id: `stu-${Date.now().toString().slice(-4)}`,
-        user_id: userId,
-        full_name: validated.full_name,
-        email: validated.email,
-        ...newStudentData
-      };
-    }
-
-    // Also update mockStore in case fallback is used
-    mockStore.students.unshift({
-      full_name: validated.full_name,
-      email: validated.email,
-      ...createdStudent
-    });
+    const createdStudent = {
+      ...data,
+      full_name: data.profiles?.full_name || validated.full_name,
+      email: data.profiles?.email || validated.email
+    };
 
     res.status(201).json({
       success: true,
@@ -238,35 +175,21 @@ export const updateStudentPerformance = async (req, res, next) => {
     const { id } = req.params;
     const validated = studentPerformanceUpdateSchema.parse(req.body);
 
-    let currentStudent = null;
+    const { data: currentData, error: fetchErr } = await supabase
+      .from('students')
+      .select('*, profiles(full_name, email)')
+      .or(`id.eq.${id},student_code.eq.${id}`)
+      .maybeSingle();
 
-    if (supabase) {
-      try {
-        const { data } = await supabase
-          .from('students')
-          .select('*, profiles(full_name, email)')
-          .or(`id.eq.${id},student_code.eq.${id}`)
-          .maybeSingle();
-        if (data) {
-          currentStudent = {
-            ...data,
-            full_name: data.profiles?.full_name || data.full_name || `Student ${data.student_code}`,
-            email: data.profiles?.email || data.email || `${data.student_code.toLowerCase()}@student.university.edu`
-          };
-        }
-      } catch (err) {
-        console.warn('[studentController] Fetch for update warning:', err.message);
-      }
-    }
-
-    if (!currentStudent) {
-      const idx = mockStore.students.findIndex(s => s.id === id || s.student_code === id);
-      if (idx !== -1) currentStudent = mockStore.students[idx];
-    }
-
-    if (!currentStudent) {
+    if (fetchErr || !currentData) {
       return res.status(404).json({ success: false, message: 'Student record not found' });
     }
+
+    const currentStudent = {
+      ...currentData,
+      full_name: currentData.profiles?.full_name || currentData.full_name || `Student ${currentData.student_code}`,
+      email: currentData.profiles?.email || currentData.email || `${currentData.student_code.toLowerCase()}@student.university.edu`
+    };
 
     const updatedFields = {
       ...(validated.current_gpa !== undefined && { current_gpa: Number(validated.current_gpa) }),
@@ -279,37 +202,22 @@ export const updateStudentPerformance = async (req, res, next) => {
     const aiPrediction = await predictStudentRisk(studentForAi);
     updatedFields.predicted_risk = normalizeRiskLevel(aiPrediction.riskLevel);
 
-    let finalStudent = { ...currentStudent, ...updatedFields };
+    const { data: updatedData, error: updateErr } = await supabase
+      .from('students')
+      .update(updatedFields)
+      .eq('id', currentStudent.id)
+      .select('*, profiles(full_name, email)')
+      .single();
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('students')
-          .update(updatedFields)
-          .eq('id', currentStudent.id)
-          .select('*, profiles(full_name, email)')
-          .single();
-
-        if (!error && data) {
-          finalStudent = {
-            ...data,
-            full_name: data.profiles?.full_name || currentStudent.full_name,
-            email: data.profiles?.email || currentStudent.email
-          };
-          console.log('[Supabase] Updated student performance:', finalStudent.id);
-        } else if (error) {
-          console.error('[Supabase] Update student error:', error.message);
-        }
-      } catch (err) {
-        console.warn('[studentController] Supabase update student fallback:', err.message);
-      }
+    if (updateErr) {
+      return res.status(500).json({ success: false, message: updateErr.message });
     }
 
-    // Update in mockStore
-    const index = mockStore.students.findIndex(s => s.id === id || s.id === currentStudent.id || s.student_code === id);
-    if (index !== -1) {
-      mockStore.students[index] = finalStudent;
-    }
+    const finalStudent = {
+      ...updatedData,
+      full_name: updatedData.profiles?.full_name || currentStudent.full_name,
+      email: updatedData.profiles?.email || currentStudent.email
+    };
 
     res.json({
       success: true,
@@ -326,44 +234,29 @@ export const triggerStudentRiskPrediction = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    let student = null;
+    const { data: currentData, error: fetchErr } = await supabase
+      .from('students')
+      .select('*, profiles(full_name, email)')
+      .or(`id.eq.${id},student_code.eq.${id}`)
+      .maybeSingle();
 
-    if (supabase) {
-      try {
-        const { data } = await supabase
-          .from('students')
-          .select('*, profiles(full_name, email)')
-          .or(`id.eq.${id},student_code.eq.${id}`)
-          .maybeSingle();
-        if (data) {
-          student = {
-            ...data,
-            full_name: data.profiles?.full_name || data.full_name || `Student ${data.student_code}`,
-            email: data.profiles?.email || data.email || `${data.student_code.toLowerCase()}@student.university.edu`
-          };
-        }
-      } catch (e) {}
-    }
-
-    if (!student) {
-      student = mockStore.students.find(s => s.id === id || s.student_code === id);
-    }
-
-    if (!student) {
+    if (fetchErr || !currentData) {
       return res.status(404).json({ success: false, message: 'Student not found' });
     }
+
+    const student = {
+      ...currentData,
+      full_name: currentData.profiles?.full_name || currentData.full_name || `Student ${currentData.student_code}`,
+      email: currentData.profiles?.email || currentData.email || `${currentData.student_code.toLowerCase()}@student.university.edu`
+    };
 
     const prediction = await predictStudentRisk(student);
     const normalizedRisk = normalizeRiskLevel(prediction.riskLevel);
 
-    if (supabase) {
-      try {
-        await supabase
-          .from('students')
-          .update({ predicted_risk: normalizedRisk, updated_at: new Date().toISOString() })
-          .eq('id', student.id);
-      } catch (e) {}
-    }
+    await supabase
+      .from('students')
+      .update({ predicted_risk: normalizedRisk, updated_at: new Date().toISOString() })
+      .eq('id', student.id);
 
     student.predicted_risk = normalizedRisk;
 

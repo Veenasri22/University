@@ -1,5 +1,4 @@
 import jwt from 'jsonwebtoken';
-import { mockStore } from '../services/mockStore.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_university_academic_intelligence_jwt_key';
 

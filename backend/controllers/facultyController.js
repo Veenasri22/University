@@ -1,42 +1,30 @@
 import { supabase } from '../config/db.js';
-import { mockStore } from '../services/mockStore.js';
 import { groq, GROQ_MODEL } from '../config/groq.js';
 
 export const getFaculty = async (req, res, next) => {
   try {
     const { department } = req.query;
 
-    let facultyList = [];
-    let isSupabaseActive = false;
+    let query = supabase
+      .from('faculty')
+      .select('*, profiles(full_name, email)')
+      .order('created_at', { ascending: false });
 
-    if (supabase) {
-      try {
-        let query = supabase.from('faculty').select('*, profiles(full_name, email)').order('created_at', { ascending: false });
-
-        if (department && department !== 'ALL') {
-          query = query.eq('department', department);
-        }
-
-        const { data, error } = await query;
-        if (!error && data) {
-          isSupabaseActive = true;
-          facultyList = data.map(f => ({
-            ...f,
-            full_name: f.profiles?.full_name || f.full_name || `Faculty ${f.designation}`,
-            email: f.profiles?.email || f.email || `faculty@university.edu`
-          }));
-        }
-      } catch (err) {
-        console.warn('[facultyController] Supabase fetch warning:', err.message);
-      }
+    if (department && department !== 'ALL') {
+      query = query.eq('department', department);
     }
 
-    if (!isSupabaseActive && !supabase) {
-      facultyList = [...mockStore.faculty];
-      if (department && department !== 'ALL') {
-        facultyList = facultyList.filter(f => f.department === department);
-      }
+    const { data, error } = await query;
+    if (error) {
+      console.error('[facultyController] Supabase fetch error:', error.message);
+      return res.status(500).json({ success: false, message: error.message });
     }
+
+    const facultyList = (data || []).map(f => ({
+      ...f,
+      full_name: f.profiles?.full_name || f.full_name || `Faculty ${f.designation}`,
+      email: f.profiles?.email || f.email || `faculty@university.edu`
+    }));
 
     res.json({
       success: true,
@@ -57,32 +45,30 @@ export const createFaculty = async (req, res, next) => {
     }
 
     let userId = null;
+    const facultyEmail = email || `prof.${full_name.toLowerCase().replace(/\s+/g, '.')}@university.edu`;
 
-    if (supabase) {
-      try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .insert({
-            email: email || `prof.${full_name.toLowerCase().replace(/\s+/g, '.')}@university.edu`,
-            full_name,
-            role: 'FACULTY',
-            department
-          })
-          .select()
-          .single();
+    const { data: profile } = await supabase
+      .from('profiles')
+      .insert({
+        email: facultyEmail,
+        full_name,
+        role: 'FACULTY',
+        department
+      })
+      .select()
+      .single();
 
-        if (profile) userId = profile.id;
-      } catch (err) {
-        console.warn('[facultyController] Profile creation warning:', err.message);
-      }
-    }
+    if (profile) userId = profile.id;
 
     const coursesArray = Array.isArray(courses_taught)
       ? courses_taught
       : (courses_taught ? String(courses_taught).split(',').map(c => c.trim()) : []);
 
     const newFacultyData = {
+      id: `fac-${Date.now().toString().slice(-4)}`,
       ...(userId && { user_id: userId }),
+      full_name,
+      email: facultyEmail,
       department,
       designation,
       workload_hours: Number(workload_hours || 0),
@@ -92,42 +78,22 @@ export const createFaculty = async (req, res, next) => {
       courses_taught: coursesArray
     };
 
-    let createdFaculty = null;
+    const { data, error } = await supabase
+      .from('faculty')
+      .insert(newFacultyData)
+      .select('*, profiles(full_name, email)')
+      .single();
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('faculty')
-          .insert(newFacultyData)
-          .select('*, profiles(full_name, email)')
-          .single();
-
-        if (!error && data) {
-          createdFaculty = {
-            ...data,
-            full_name: data.profiles?.full_name || full_name,
-            email: data.profiles?.email || email
-          };
-          console.log('[Supabase] Created faculty record:', data.id);
-        } else if (error) {
-          console.error('[Supabase] Create faculty error:', error.message);
-        }
-      } catch (err) {
-        console.warn('[facultyController] Supabase create faculty fallback:', err.message);
-      }
+    if (error) {
+      console.error('[Supabase] Create faculty error:', error.message);
+      return res.status(500).json({ success: false, message: error.message });
     }
 
-    if (!createdFaculty) {
-      createdFaculty = {
-        id: `fac-${Date.now().toString().slice(-4)}`,
-        user_id: userId,
-        full_name,
-        email: email || `prof.${full_name.toLowerCase().replace(/\s+/g, '.')}@university.edu`,
-        ...newFacultyData
-      };
-    }
-
-    mockStore.faculty.unshift(createdFaculty);
+    const createdFaculty = {
+      ...data,
+      full_name: data.profiles?.full_name || full_name,
+      email: data.profiles?.email || facultyEmail
+    };
 
     res.status(201).json({
       success: true,
@@ -141,28 +107,20 @@ export const createFaculty = async (req, res, next) => {
 
 export const getFacultyInsights = async (req, res, next) => {
   try {
-    let facultyList = [];
-    let isSupabaseActive = false;
+    const { data, error } = await supabase
+      .from('faculty')
+      .select('*, profiles(full_name, email)');
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from('faculty').select('*, profiles(full_name, email)');
-        if (!error && data) {
-          isSupabaseActive = true;
-          facultyList = data.map(f => ({
-            ...f,
-            full_name: f.profiles?.full_name || f.full_name || `Faculty ${f.designation}`,
-            email: f.profiles?.email || f.email || `faculty@university.edu`
-          }));
-        }
-      } catch (err) {
-        console.warn('[facultyController] Insights query fallback:', err.message);
-      }
+    if (error) {
+      console.error('[facultyController] Insights fetch error:', error.message);
+      return res.status(500).json({ success: false, message: error.message });
     }
 
-    if (!isSupabaseActive && !supabase) {
-      facultyList = mockStore.faculty;
-    }
+    const facultyList = (data || []).map(f => ({
+      ...f,
+      full_name: f.profiles?.full_name || f.full_name || `Faculty ${f.designation}`,
+      email: f.profiles?.email || f.email || `faculty@university.edu`
+    }));
 
     const totalFaculty = facultyList.length;
     const avgRating = totalFaculty > 0

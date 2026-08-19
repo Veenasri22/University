@@ -1,42 +1,25 @@
 import { supabase } from '../config/db.js';
-import { mockStore } from '../services/mockStore.js';
 
 export const getCourses = async (req, res, next) => {
   try {
     const { department } = req.query;
 
-    let courses = [];
-    let isSupabaseActive = false;
+    let query = supabase.from('courses').select('*').order('created_at', { ascending: false });
 
-    if (supabase) {
-      try {
-        let query = supabase.from('courses').select('*').order('created_at', { ascending: false });
-
-        if (department && department !== 'ALL') {
-          query = query.eq('department', department);
-        }
-
-        const { data, error } = await query;
-        if (!error && data) {
-          isSupabaseActive = true;
-          courses = data;
-        }
-      } catch (err) {
-        console.warn('[courseController] Supabase fetch courses warning:', err.message);
-      }
+    if (department && department !== 'ALL') {
+      query = query.eq('department', department);
     }
 
-    if (!isSupabaseActive && !supabase) {
-      courses = [...mockStore.courses];
-      if (department && department !== 'ALL') {
-        courses = courses.filter(c => c.department === department);
-      }
+    const { data, error } = await query;
+    if (error) {
+      console.error('[courseController] Supabase fetch error:', error.message);
+      return res.status(500).json({ success: false, message: error.message });
     }
 
     res.json({
       success: true,
-      count: courses.length,
-      courses
+      count: (data || []).length,
+      courses: data || []
     });
   } catch (err) {
     next(err);
@@ -62,6 +45,7 @@ export const createCourse = async (req, res, next) => {
           : []);
 
     const newCourseData = {
+      id: `crs-${Date.now().toString().slice(-4)}`,
       course_code: String(course_code).toUpperCase(),
       title,
       department,
@@ -71,40 +55,21 @@ export const createCourse = async (req, res, next) => {
       prerequisites: prereqArray
     };
 
-    let createdCourse = null;
+    const { data, error } = await supabase
+      .from('courses')
+      .insert(newCourseData)
+      .select()
+      .single();
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('courses')
-          .insert(newCourseData)
-          .select()
-          .single();
-
-        if (!error && data) {
-          createdCourse = data;
-          console.log('[Supabase] Created course record:', data.id);
-        } else if (error) {
-          console.error('[Supabase] Create course error:', error.message);
-        }
-      } catch (err) {
-        console.warn('[courseController] Supabase create course fallback:', err.message);
-      }
+    if (error) {
+      console.error('[Supabase] Create course error:', error.message);
+      return res.status(500).json({ success: false, message: error.message });
     }
-
-    if (!createdCourse) {
-      createdCourse = {
-        id: `crs-${Date.now().toString().slice(-4)}`,
-        ...newCourseData
-      };
-    }
-
-    mockStore.courses.unshift(createdCourse);
 
     res.status(201).json({
       success: true,
       message: 'Course created successfully in Supabase',
-      course: createdCourse
+      course: data
     });
   } catch (err) {
     next(err);
@@ -116,28 +81,13 @@ export const updateSyllabusProgress = async (req, res, next) => {
     const { id } = req.params;
     const { syllabus_progress, outcome_index } = req.body;
 
-    let currentCourse = null;
+    const { data: currentCourse, error: fetchErr } = await supabase
+      .from('courses')
+      .select('*')
+      .or(`id.eq.${id},course_code.eq.${id}`)
+      .maybeSingle();
 
-    if (supabase) {
-      try {
-        const { data } = await supabase
-          .from('courses')
-          .select('*')
-          .or(`id.eq.${id},course_code.eq.${id}`)
-          .maybeSingle();
-
-        if (data) currentCourse = data;
-      } catch (err) {
-        console.warn('[courseController] Fetch course warning:', err.message);
-      }
-    }
-
-    if (!currentCourse) {
-      const found = mockStore.courses.find(c => c.id === id || c.course_code === id);
-      if (found) currentCourse = found;
-    }
-
-    if (!currentCourse) {
+    if (fetchErr || !currentCourse) {
       return res.status(404).json({ success: false, message: 'Course not found' });
     }
 
@@ -154,45 +104,26 @@ export const updateSyllabusProgress = async (req, res, next) => {
       };
     }
 
-    let finalCourse = {
-      ...currentCourse,
-      syllabus_progress: updatedProgress,
-      learning_outcomes: updatedOutcomes
-    };
+    const { data: updatedCourse, error: updateErr } = await supabase
+      .from('courses')
+      .update({
+        syllabus_progress: updatedProgress,
+        learning_outcomes: updatedOutcomes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', currentCourse.id)
+      .select()
+      .single();
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('courses')
-          .update({
-            syllabus_progress: updatedProgress,
-            learning_outcomes: updatedOutcomes
-          })
-          .eq('id', currentCourse.id)
-          .select()
-          .single();
-
-        if (!error && data) {
-          finalCourse = data;
-          console.log('[Supabase] Updated course progress:', data.id);
-        } else if (error) {
-          console.error('[Supabase] Update course error:', error.message);
-        }
-      } catch (err) {
-        console.warn('[courseController] Supabase update course fallback:', err.message);
-      }
-    }
-
-    // Keep mockStore synced
-    const mockIdx = mockStore.courses.findIndex(c => c.id === id || c.course_code === id);
-    if (mockIdx !== -1) {
-      mockStore.courses[mockIdx] = finalCourse;
+    if (updateErr) {
+      console.error('[Supabase] Update course error:', updateErr.message);
+      return res.status(500).json({ success: false, message: updateErr.message });
     }
 
     res.json({
       success: true,
       message: 'Course curriculum progress updated and saved to Supabase',
-      course: finalCourse
+      course: updatedCourse
     });
   } catch (err) {
     next(err);
