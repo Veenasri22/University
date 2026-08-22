@@ -20,10 +20,22 @@ import {
   getAiSessions,
   getSessionMessages
 } from '../controllers/aiController.js';
+import {
+  handleChatStream,
+  getChatSessions,
+  getChatSessionMessages,
+  deleteChatSession
+} from '../controllers/chatStreamController.js';
 import { authenticateToken, authorizeRoles } from '../middleware/authMiddleware.js';
 import { aiLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
+
+// ─── Real-Time Role-Aware Groq Streaming Chatbot ─────────────────────────────
+router.post('/chat-stream', handleChatStream);
+router.get('/chat-sessions', getChatSessions);
+router.get('/chat-sessions/:sessionId/messages', getChatSessionMessages);
+router.delete('/chat-sessions/:sessionId', deleteChatSession);
 
 // ─── Public/Unauthenticated AI Assistant ──────────────────────────────────────
 router.post('/generate-advisory', handleGenerateAdvisory);

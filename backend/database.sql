@@ -235,6 +235,44 @@ ALTER TABLE course_syllabus ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public access to student_attendance" ON student_attendance FOR ALL USING (true);
 CREATE POLICY "Public access to course_syllabus" ON course_syllabus FOR ALL USING (true);
 
+-- 12. Role-Aware Chatbot System (Groq llama-3.3-70b-versatile)
+CREATE TABLE IF NOT EXISTS public.chat_sessions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  title TEXT NOT NULL DEFAULT 'New Conversation',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
+CREATE TABLE IF NOT EXISTS public.chat_messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  session_id UUID NOT NULL REFERENCES public.chat_sessions(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON public.chat_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_updated_at ON public.chat_sessions(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON public.chat_messages(session_id, created_at ASC);
 
+ALTER TABLE public.chat_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "Users can manage their own chat sessions"
+    ON public.chat_sessions FOR ALL
+    USING (auth.uid() = user_id OR auth.uid() IS NULL);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "Users can manage messages in their own sessions"
+    ON public.chat_messages FOR ALL
+    USING (
+      EXISTS (
+        SELECT 1 FROM public.chat_sessions s
+        WHERE s.id = chat_messages.session_id
+        AND (s.user_id = auth.uid() OR auth.uid() IS NULL)
+      )
+    );
+EXCEPTION WHEN duplicate_object THEN null; END $$;
