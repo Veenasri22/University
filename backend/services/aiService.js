@@ -24,31 +24,31 @@ Return ONLY valid JSON matching this schema, with no markdown formatting around 
   const userPrompt = `Entity ID: "${entityId}"\nData Payload:\n${payloadStr}`;
 
   if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
-    try {
-      console.log(`[AI Service] Invoking Groq ${GROQ_MODEL} for Entity: ${entityId}`);
+    const candidateModels = [GROQ_MODEL, 'openai/gpt-oss-120b', 'groq/compound', 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b'];
+    for (const m of candidateModels) {
+      try {
+        const response = await groq.chat.completions.create({
+          model: m,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.3
+        });
 
-      const response = await groq.chat.completions.create({
-        model: GROQ_MODEL,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.3
-      });
+        const rawText = response.choices[0]?.message?.content || '{}';
+        const parsedJSON = JSON.parse(rawText);
 
-      const rawText = response.choices[0]?.message?.content || '{}';
-      const parsedJSON = JSON.parse(rawText);
-
-      return {
-        riskLevel: parsedJSON.riskLevel || 'MEDIUM',
-        summary: parsedJSON.summary || 'AI assessment completed successfully.',
-        actionSteps: Array.isArray(parsedJSON.actionSteps) ? parsedJSON.actionSteps : [],
-        followUpQuestions: Array.isArray(parsedJSON.followUpQuestions) ? parsedJSON.followUpQuestions : []
-      };
-    } catch (err) {
-      console.error('[AI Service Error] Groq API failed:', err.message);
-      console.log('[AI Service] Falling back to intelligent heuristic evaluation engine...');
+        return {
+          riskLevel: parsedJSON.riskLevel || 'MEDIUM',
+          summary: parsedJSON.summary || 'AI assessment completed successfully.',
+          actionSteps: Array.isArray(parsedJSON.actionSteps) ? parsedJSON.actionSteps : [],
+          followUpQuestions: Array.isArray(parsedJSON.followUpQuestions) ? parsedJSON.followUpQuestions : []
+        };
+      } catch (err) {
+        // try next candidate
+      }
     }
   }
 

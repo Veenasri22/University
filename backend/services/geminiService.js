@@ -20,18 +20,26 @@ async function generateGroqCompletion(prompt, systemInstruction = ADVISOR_SYSTEM
     throw new Error('GROQ_API_KEY is not configured');
   }
 
-  const response = await groq.chat.completions.create({
-    model: GROQ_MODEL,
-    messages: [
-      { role: 'system', content: systemInstruction },
-      { role: 'user', content: prompt }
-    ],
-    temperature: 0.3
-  });
+  const candidateModels = [GROQ_MODEL, 'openai/gpt-oss-120b', 'groq/compound', 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b'];
+  for (const m of candidateModels) {
+    try {
+      const response = await groq.chat.completions.create({
+        model: m,
+        messages: [
+          { role: 'system', content: systemInstruction },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.3
+      });
 
-  let content = response.choices[0]?.message?.content?.trim() || '';
-  content = content.replace(/<Think>[\s\S]*?<\/Think>/gi, '').trim();
-  return content;
+      let content = response.choices[0]?.message?.content?.trim() || '';
+      content = content.replace(/<Think>[\s\S]*?<\/Think>/gi, '').trim();
+      return content;
+    } catch (e) {
+      // try next candidate
+    }
+  }
+  throw new Error('No compatible Groq completion model responded.');
 }
 
 async function generateGroqStructured(prompt, schemaInstruction, systemInstruction = ACADEMIC_INTELLIGENCE_SYSTEM) {
@@ -40,19 +48,26 @@ async function generateGroqStructured(prompt, schemaInstruction, systemInstructi
   }
 
   const fullSystemPrompt = `${systemInstruction}\n\nSchema Guidelines: ${schemaInstruction}`;
+  const candidateModels = [GROQ_MODEL, 'openai/gpt-oss-120b', 'groq/compound', 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b'];
+  for (const m of candidateModels) {
+    try {
+      const response = await groq.chat.completions.create({
+        model: m,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: fullSystemPrompt },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.3
+      });
 
-  const response = await groq.chat.completions.create({
-    model: GROQ_MODEL,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: fullSystemPrompt },
-      { role: 'user', content: prompt }
-    ],
-    temperature: 0.3
-  });
-
-  const content = response.choices[0]?.message?.content?.trim();
-  return JSON.parse(content);
+      const content = response.choices[0]?.message?.content?.trim();
+      return JSON.parse(content);
+    } catch (e) {
+      // try next candidate
+    }
+  }
+  throw new Error('No compatible Groq structured model responded.');
 }
 
 // ─── 1. STUDENT PERFORMANCE RISK PREDICTION ───────────────────────────────────

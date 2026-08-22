@@ -192,14 +192,38 @@ export async function handleChatStream(req, res) {
     // Temperature adapts to role (more creative for student analogies, precise for deans/faculty)
     const temperature = userRole === 'STUDENT' ? 0.6 : 0.3;
 
-    // 5. Stream from Groq Cloud API
-    const stream = await groq.chat.completions.create({
-      model: GROQ_MODEL || 'llama-3.3-70b-versatile',
-      messages: groqMessages,
-      temperature,
-      max_tokens: 2048,
-      stream: true
-    });
+    // 5. Stream from Groq Cloud API with model fallback
+    const candidateModels = [
+      process.env.GROQ_MODEL,
+      'openai/gpt-oss-120b',
+      'groq/compound',
+      'openai/gpt-oss-20b',
+      'qwen/qwen3.6-27b',
+      'llama-3.3-70b-versatile'
+    ].filter(Boolean);
+
+    let stream = null;
+    let chosenModel = null;
+
+    for (const modelName of candidateModels) {
+      try {
+        stream = await groq.chat.completions.create({
+          model: modelName,
+          messages: groqMessages,
+          temperature,
+          max_tokens: 2048,
+          stream: true
+        });
+        chosenModel = modelName;
+        break;
+      } catch (mErr) {
+        console.warn(`[Chat Stream] Model '${modelName}' unavailable: ${mErr.message}. Trying next candidate...`);
+      }
+    }
+
+    if (!stream) {
+      throw new Error('Unable to connect to any Groq AI model. Please check GROQ_API_KEY and model permissions.');
+    }
 
     let fullAssistantResponse = '';
 

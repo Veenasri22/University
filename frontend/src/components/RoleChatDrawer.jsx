@@ -439,7 +439,7 @@ export default function RoleChatDrawer({ defaultOpen = true, embedded = false })
               </h2>
               <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${config.badgeBg}`}>
                 <Zap className="w-3 h-3 animate-pulse" />
-                Groq • Llama-3.3-70B
+                Groq AI Engine
               </span>
             </div>
             <p className="text-xs text-slate-400 font-medium">{config.subtitle}</p>
@@ -637,7 +637,7 @@ export default function RoleChatDrawer({ defaultOpen = true, embedded = false })
             </div>
             <div className="text-center mt-2">
               <span className="text-[10px] text-slate-500 font-mono">
-                Role Persona: <span className="text-slate-400 font-semibold">{rawRole}</span> • Llama-3.3-70B Versatile Engine
+                Role Persona: <span className="text-slate-400 font-semibold">{rawRole}</span> • Groq AI Neural Engine
               </span>
             </div>
           </form>

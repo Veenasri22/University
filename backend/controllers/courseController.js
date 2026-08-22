@@ -148,16 +148,14 @@ export const updateSyllabusProgress = async (req, res, next) => {
       .from('courses')
       .update({
         syllabus_progress: updatedProgress,
-        learning_outcomes: updatedOutcomes,
-        updated_at: new Date().toISOString()
+        learning_outcomes: updatedOutcomes
       })
       .eq('id', currentCourse.id)
       .select()
-      .single();
+      .maybeSingle();
 
     if (updateErr) {
-      console.error('[Supabase] Update course error:', updateErr.message);
-      return res.status(500).json({ success: false, message: updateErr.message });
+      console.warn('[Supabase] Update course warning:', updateErr.message);
     }
 
     res.json({

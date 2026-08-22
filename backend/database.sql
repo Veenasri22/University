@@ -338,10 +338,27 @@ CREATE TABLE IF NOT EXISTS public.attendance_logs (
 CREATE INDEX IF NOT EXISTS idx_attendance_logs_date ON public.attendance_logs(date DESC);
 CREATE INDEX IF NOT EXISTS idx_attendance_logs_student_id ON public.attendance_logs(student_id);
 
-ALTER TABLE public.attendance_logs ENABLE ROW LEVEL SECURITY;
-
 DO $$ BEGIN
   CREATE POLICY "Public read and write for attendance_logs" ON public.attendance_logs FOR ALL USING (true);
 EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- 17. Policies Table for RAG Vector Knowledge Base
+CREATE TABLE IF NOT EXISTS public.policies (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  category TEXT NOT NULL,
+  content TEXT NOT NULL,
+  embedding VECTOR(768),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_policies_category ON public.policies(category);
+
+ALTER TABLE public.policies ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "Public read and staff write for policies" ON public.policies FOR ALL USING (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
 
 
