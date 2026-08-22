@@ -317,9 +317,11 @@ export async function predictStudentRisk(studentData) {
 export async function runMultiAgentAdvisor({ message, agentType, studentContext, policyContext, chatHistory }) {
   if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
     try {
+      const snapshot = await getLiveUniversitySnapshot();
       const historyStr = (chatHistory || []).map(m => `${m.sender === 'user' ? 'User' : 'AI'}: ${m.message_text || m.text || ''}`).join('\n');
       const fullPrompt = `${historyStr ? historyStr + '\n' : ''}User: ${message}\nAssistant:`;
-      const text = await generateGroqCompletion(fullPrompt);
+      const systemInstruction = `You are an expert AI Academic Advisor (${agentType || 'GENERAL'}). Answer user queries accurately using the live real-time institutional data below:\n\n${snapshot}`;
+      const text = await generateGroqCompletion(fullPrompt, systemInstruction);
       return { text, agent: agentType };
     } catch (e) {
       console.error('[Groq] runMultiAgentAdvisor error:', e.message);
@@ -338,12 +340,16 @@ export async function generateExecutiveReport({ department, timeframe, reportTyp
   });
 }
 
+import { getLiveUniversitySnapshot } from './chatPromptService.js';
+
 export async function generateAiAnswer(userPrompt, conversationHistory = []) {
   if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key') {
     try {
+      const snapshot = await getLiveUniversitySnapshot();
       const historyStr = (conversationHistory || []).map(m => `${m.sender === 'user' ? 'User' : 'Assistant'}: ${m.message_text}`).join('\n');
       const prompt = `${historyStr ? historyStr + '\n' : ''}User: ${userPrompt}\nAssistant:`;
-      const text = await generateGroqCompletion(prompt);
+      const systemInstruction = `You are the Lead University AI Academic Advisor. Answer user questions accurately with real-time academic data and clear guidelines.\n\n${snapshot}`;
+      const text = await generateGroqCompletion(prompt, systemInstruction);
       return text;
     } catch (err) {
       console.error('[Groq] generateAiAnswer error:', err.message);

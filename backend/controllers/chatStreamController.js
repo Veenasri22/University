@@ -182,8 +182,8 @@ export async function handleChatStream(req, res) {
       historyMessages = [{ role: 'user', content: message.trim() }];
     }
 
-    // 4. Construct prompt and guardrails
-    const systemPrompt = getRoleSystemPrompt(userRole, userName, department);
+    // 4. Construct prompt with real-time live data context and guardrails
+    const systemPrompt = await getRoleSystemPrompt(userRole, userName, department);
     const groqMessages = [
       { role: 'system', content: systemPrompt },
       ...historyMessages
