@@ -11,23 +11,33 @@ import {
   Clock,
   Sparkles,
   ShieldCheck,
-  UserCheck
+  UserCheck,
+  Loader2,
+  Check
 } from 'lucide-react';
 import { Modal } from '../components/common/Modal.jsx';
 
 export const Attendance = () => {
   const { user } = useAuth();
-  const isStudent = user?.role === 'STUDENT' || user?.role === 'Student';
+  const rawRole = (user?.role || '').toUpperCase();
+  const isStudent = rawRole === 'STUDENT';
+  const canMarkAttendance = rawRole === 'FACULTY' || rawRole === 'ADMIN' || rawRole === 'SUPER_ADMIN' || rawRole === 'DEAN' || rawRole === 'HOD';
+
   const [logs, setLogs] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [successNotice, setSuccessNotice] = useState(false);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState({
     course_code: 'CS201',
-    student_name: user?.full_name || 'Alex Rivera',
-    status: 'ABSENT',
+    student_id: '',
+    student_name: 'Alex Rivera',
+    status: 'PRESENT',
     department: user?.department || 'Computer Science'
   });
 
@@ -36,9 +46,31 @@ export const Attendance = () => {
   const fetchAttendance = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/attendance');
-      setLogs(res.logs || []);
-      setAlerts(res.thresholdAlerts || []);
+      const [attRes, stuRes, subRes] = await Promise.allSettled([
+        api.get('/attendance'),
+        api.get('/students'),
+        api.get('/subjects')
+      ]);
+
+      if (attRes.status === 'fulfilled') {
+        setLogs(attRes.value.logs || []);
+        setAlerts(attRes.value.thresholdAlerts || []);
+      }
+      if (stuRes.status === 'fulfilled') {
+        const stuList = stuRes.value.students || [];
+        setStudents(stuList);
+        if (stuList.length > 0 && !form.student_id) {
+          setForm(prev => ({
+            ...prev,
+            student_id: stuList[0].id,
+            student_name: stuList[0].full_name,
+            department: stuList[0].department || prev.department
+          }));
+        }
+      }
+      if (subRes.status === 'fulfilled') {
+        setSubjects(subRes.value.subjects || []);
+      }
     } catch (e) {
       console.warn('[Attendance] Fetch error:', e);
     } finally {
@@ -50,22 +82,60 @@ export const Attendance = () => {
     fetchAttendance();
   }, []);
 
+  const handleOpenModal = () => {
+    if (students.length > 0 && !form.student_id) {
+      setForm(prev => ({
+        ...prev,
+        student_id: students[0].id,
+        student_name: students[0].full_name,
+        department: students[0].department || 'Computer Science'
+      }));
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleStudentSelect = (e) => {
+    const selectedId = e.target.value;
+    const selectedStudent = students.find(s => s.id === selectedId);
+    if (selectedStudent) {
+      setForm(prev => ({
+        ...prev,
+        student_id: selectedStudent.id,
+        student_name: selectedStudent.full_name,
+        department: selectedStudent.department || prev.department
+      }));
+    } else {
+      setForm(prev => ({ ...prev, student_id: selectedId, student_name: selectedId }));
+    }
+  };
+
   const handleLogSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+
     try {
+      setSubmitting(true);
       const res = await api.post('/attendance', form);
-      setIsModalOpen(false);
-      if (res.mcpAlertSent) {
-        setMcpResult(res.mcpAlertSent);
+      if (res && res.success) {
+        setSuccessNotice(true);
+        if (res.mcpAlertSent) {
+          setMcpResult(res.mcpAlertSent);
+        }
+        setTimeout(() => {
+          setSuccessNotice(false);
+          setIsModalOpen(false);
+        }, 500);
+        await fetchAttendance();
       }
-      fetchAttendance();
     } catch (err) {
+      console.error('[Attendance] Submit error:', err);
       alert(err.message || 'Error logging attendance');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const studentName = user?.full_name || 'Student';
-  const studentDept = user?.department || 'Computer Science';
 
   // Filter logs for logged-in student
   const studentLogs = logs.filter(
@@ -83,9 +153,9 @@ export const Attendance = () => {
 
   // Calculate personal metrics for student view
   const totalClasses = displayLogs.length;
-  const presentCount = displayLogs.filter(l => l.status === 'PRESENT' || l.status === 'Present').length;
-  const absentCount = displayLogs.filter(l => l.status === 'ABSENT' || l.status === 'Absent').length;
-  const attendanceRate = totalClasses > 0 ? ((presentCount / totalClasses) * 100).toFixed(1) : '90.0';
+  const presentCount = displayLogs.filter(l => (l.status || '').toUpperCase() === 'PRESENT').length;
+  const absentCount = displayLogs.filter(l => (l.status || '').toUpperCase() === 'ABSENT').length;
+  const attendanceRate = totalClasses > 0 ? ((presentCount / totalClasses) * 100).toFixed(1) : '95.0';
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -98,171 +168,189 @@ export const Attendance = () => {
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
             {isStudent
-              ? `Personal participation records for ${studentName} (${studentDept}). Keep above 75% threshold.`
-              : 'Real-time participation tracking and automated threshold alert warnings (<75% attendance).'}
+              ? 'Review your logged attendance records, compliance flags, and active notifications.'
+              : 'Real-time participation tracking, policy alerts (<75% threshold), and compliance verification.'}
           </p>
         </div>
 
-        {!isStudent ? (
+        {canMarkAttendance && (
           <button
-            onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all"
+            onClick={handleOpenModal}
+            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             Log Class Attendance Entry
           </button>
-        ) : (
-          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
-            <ShieldCheck className="w-4 h-4" />
-            <span>Status: Good Standing ({attendanceRate}%)</span>
-          </div>
         )}
       </div>
 
-      {/* Student Personal Attendance Metrics Bar */}
-      {isStudent && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="glass-panel rounded-2xl p-4 border border-slate-800 space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Attendance Rate</span>
-            <div className="text-xl font-extrabold text-emerald-400">{attendanceRate}%</div>
-            <p className="text-[10px] text-slate-400">Target: &gt;75% required</p>
+      {/* Threshold Warning Banner */}
+      {studentAlerts.length > 0 && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 space-y-2">
+          <div className="flex items-center gap-2 font-bold text-xs">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Policy 4.2 Attendance Threshold Alerts ({studentAlerts.length} Students At Risk)</span>
           </div>
-          <div className="glass-panel rounded-2xl p-4 border border-slate-800 space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Present Sessions</span>
-            <div className="text-xl font-extrabold text-white">{presentCount}</div>
-            <p className="text-[10px] text-emerald-400 font-semibold">Attended</p>
-          </div>
-          <div className="glass-panel rounded-2xl p-4 border border-slate-800 space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Absent Sessions</span>
-            <div className="text-xl font-extrabold text-rose-400">{absentCount}</div>
-            <p className="text-[10px] text-rose-400 font-semibold">Missed</p>
-          </div>
-          <div className="glass-panel rounded-2xl p-4 border border-slate-800 space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Total Tracked</span>
-            <div className="text-xl font-extrabold text-blue-400">{totalClasses}</div>
-            <p className="text-[10px] text-slate-400">Classes</p>
-          </div>
-        </div>
-      )}
-
-      {/* MCP Notification Success Banner */}
-      {mcpResult && (
-        <div className="glass-panel rounded-2xl p-4 border border-rose-500/30 bg-rose-950/20 flex items-center justify-between animate-fadeIn">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400">
-              <Mail className="w-5 h-5" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-white">MCP Gmail Connector Triggered</h4>
-              <p className="text-[11px] text-slate-300">
-                Automated threshold email dispatched to <strong>{mcpResult.recipient}</strong> (Status: {mcpResult.status})
-              </p>
-            </div>
-          </div>
-          <button onClick={() => setMcpResult(null)} className="text-xs font-bold text-slate-400 hover:text-white">
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      {/* Active Threshold Alerts Grid */}
-      <div className="glass-panel rounded-3xl p-6 border border-slate-800 space-y-4">
-        <h3 className="text-sm font-bold text-white flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-amber-400" />
-          {isStudent ? 'My Threshold Warning Alerts (<75%)' : 'Active Threshold Warning Logs (<75% Attendance)'}
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {studentAlerts.length === 0 ? (
-            <div className="col-span-2 text-xs text-slate-400 flex items-center gap-2 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20 text-emerald-300">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              {isStudent
-                ? `No attendance warnings for ${studentName}. Your current attendance rate (${attendanceRate}%) meets university standards.`
-                : 'No active compliance warnings. All students exceed 75% attendance threshold.'}
-            </div>
-          ) : (
-            studentAlerts.map((alt) => (
-              <div key={alt.student_id} className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-between">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+            {studentAlerts.slice(0, 3).map((a, i) => (
+              <div key={i} className="p-2.5 rounded-xl bg-slate-900/80 border border-amber-500/30 flex items-center justify-between text-xs">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-xs text-white">{alt.student_name}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                      {alt.warning_level}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-1">{alt.department} • Attendance Rate: <strong className="text-rose-400">{alt.attendance_rate}%</strong></p>
+                  <span className="font-bold text-white block">{a.student_name}</span>
+                  <span className="text-[10px] text-slate-400">{a.department}</span>
                 </div>
-                <div className="p-2 rounded-xl bg-rose-500/20 text-rose-300">
-                  <Mail className="w-4 h-4" />
+                <div className="text-right">
+                  <span className="font-extrabold text-rose-400 block">{a.attendance_rate}%</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold">
+                    {a.warning_level}
+                  </span>
                 </div>
               </div>
-            ))
-          )}
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Attendance Metrics Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="glass-panel rounded-2xl p-4 border border-slate-800 flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-blue-500/10 text-blue-400">
+            <UserCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-400 font-medium">Total Classes Tracked</p>
+            <p className="text-xl font-bold text-white">{totalClasses}</p>
+          </div>
+        </div>
+
+        <div className="glass-panel rounded-2xl p-4 border border-slate-800 flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-400 font-medium">Present Entries</p>
+            <p className="text-xl font-bold text-emerald-400">{presentCount}</p>
+          </div>
+        </div>
+
+        <div className="glass-panel rounded-2xl p-4 border border-slate-800 flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-rose-500/10 text-rose-400">
+            <XCircle className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-400 font-medium">Absences Recorded</p>
+            <p className="text-xl font-bold text-rose-400">{absentCount}</p>
+          </div>
         </div>
       </div>
 
-      {/* Attendance History Logs Table */}
-      <div className="glass-panel rounded-3xl border border-slate-800 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-800 font-bold text-sm text-white flex items-center justify-between">
-          <span>{isStudent ? `Attendance Records for ${studentName}` : 'Recent Attendance Logs'}</span>
-          {isStudent && <span className="text-xs text-blue-400 font-normal">{studentDept}</span>}
+      {/* Log Table */}
+      <div className="glass-panel rounded-3xl p-6 border border-slate-800 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-white font-outfit">
+            Historical Attendance Log ({displayLogs.length})
+          </h3>
+          <span className="text-[10px] text-slate-500 font-mono">
+            Synced with University Attendance Ledger
+          </span>
         </div>
-        <table className="w-full text-left text-xs text-slate-300">
-          <thead className="bg-slate-900/80 uppercase text-[10px] font-bold text-slate-400 border-b border-slate-800">
-            <tr>
-              <th className="px-6 py-3.5">Student</th>
-              <th className="px-6 py-3.5">Course Code</th>
-              <th className="px-6 py-3.5">Department</th>
-              <th className="px-6 py-3.5">Date</th>
-              <th className="px-6 py-3.5">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800/60">
-            {displayLogs.map((log) => (
-              <tr key={log.id} className="hover:bg-slate-850/50">
-                <td className="px-6 py-3 font-bold text-white">{log.student_name}</td>
-                <td className="px-6 py-3 font-semibold text-blue-400">{log.course_code}</td>
-                <td className="px-6 py-3 text-slate-400">{log.department}</td>
-                <td className="px-6 py-3 text-slate-400">{log.date}</td>
-                <td className="px-6 py-3">
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                    log.status === 'PRESENT' || log.status === 'Present' 
-                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
-                      : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                  }`}>
-                    {log.status === 'Present' ? 'PRESENT' : log.status === 'Absent' ? 'ABSENT' : log.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+        {loading ? (
+          <div className="text-center text-slate-400 text-xs py-12 flex flex-col items-center gap-2">
+            <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+            <span>Loading attendance records...</span>
+          </div>
+        ) : displayLogs.length === 0 ? (
+          <div className="text-center text-slate-400 text-xs py-12">No attendance logs found.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-300">
+              <thead className="bg-slate-900/80 text-slate-400 font-semibold uppercase text-[10px]">
+                <tr>
+                  <th className="p-3">Date</th>
+                  <th className="p-3">Course</th>
+                  <th className="p-3">Student Name</th>
+                  <th className="p-3">Department</th>
+                  <th className="p-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/80">
+                {displayLogs.map((log) => {
+                  const isPres = (log.status || '').toUpperCase() === 'PRESENT';
+                  return (
+                    <tr key={log.id} className="hover:bg-slate-900/50 transition-colors">
+                      <td className="p-3 text-slate-400 font-mono">
+                        {log.date ? new Date(log.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : 'Today'}
+                      </td>
+                      <td className="p-3 font-semibold text-blue-400">{log.course_code || 'CS201'}</td>
+                      <td className="p-3 font-bold text-white">{log.student_name}</td>
+                      <td className="p-3 text-slate-400">{log.department || 'Computer Science'}</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded-lg text-xs font-bold border ${
+                          isPres
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                            : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                        }`}>
+                          {isPres ? 'PRESENT' : 'ABSENT'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Log Attendance Entry Modal */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Log Attendance Record">
         <form onSubmit={handleLogSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Student Name</label>
-            <input
-              type="text"
-              required
-              value={form.student_name}
-              onChange={(e) => setForm({ ...form, student_name: e.target.value })}
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
-            />
+            <label className="block text-xs font-semibold text-slate-300 mb-1">Select Student</label>
+            {students.length > 0 ? (
+              <select
+                value={form.student_id || (students[0]?.id || '')}
+                onChange={handleStudentSelect}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-blue-500 outline-none"
+              >
+                {students.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.full_name} ({s.student_id_number || s.student_code}) - {s.department}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                required
+                value={form.student_name}
+                onChange={(e) => setForm({ ...form, student_name: e.target.value })}
+                placeholder="Enter student name..."
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-blue-500 outline-none"
+              />
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">Course Code</label>
-              <input
-                type="text"
-                required
+              <select
                 value={form.course_code}
                 onChange={(e) => setForm({ ...form, course_code: e.target.value })}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
-              />
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-blue-500 outline-none"
+              >
+                {subjects.length > 0 ? (
+                  subjects.map(sb => (
+                    <option key={sb.id} value={sb.subject_code}>{sb.subject_code} - {sb.name}</option>
+                  ))
+                ) : (
+                  <>
+                    <option value="CS201">CS201 - Data Structures</option>
+                    <option value="CS202">CS202 - DBMS</option>
+                    <option value="ECE201">ECE201 - Digital Signal Processing</option>
+                  </>
+                )}
+              </select>
             </div>
 
             <div>
@@ -270,7 +358,7 @@ export const Attendance = () => {
               <select
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value })}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-blue-500 outline-none"
               >
                 <option value="PRESENT">PRESENT</option>
                 <option value="ABSENT">ABSENT</option>
@@ -282,15 +370,29 @@ export const Attendance = () => {
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold"
+              disabled={submitting}
+              className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white text-xs font-semibold transition"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500"
+              disabled={submitting}
+              className="px-5 py-2 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 shadow-lg shadow-blue-600/30 flex items-center gap-2 transition disabled:opacity-50"
             >
-              Submit & Check Thresholds
+              {submitting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Logging...</span>
+                </>
+              ) : successNotice ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>Logged!</span>
+                </>
+              ) : (
+                <span>Submit & Check Thresholds</span>
+              )}
             </button>
           </div>
         </form>

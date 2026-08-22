@@ -276,3 +276,72 @@ DO $$ BEGIN
       )
     );
 EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- 13. Departments Table
+CREATE TABLE IF NOT EXISTS public.departments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL UNIQUE,
+  code TEXT NOT NULL UNIQUE,
+  hod_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 14. Subjects & Units Table
+CREATE TABLE IF NOT EXISTS public.subjects (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  subject_code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  credits INT NOT NULL DEFAULT 3,
+  semester INT NOT NULL DEFAULT 1,
+  department_id UUID REFERENCES public.departments(id) ON DELETE SET NULL,
+  faculty_id UUID REFERENCES public.faculty(id) ON DELETE SET NULL,
+  total_units INT NOT NULL DEFAULT 5,
+  completed_units INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 15. Examination Marks & Backlogs Table
+CREATE TABLE IF NOT EXISTS public.marks (
+  id TEXT PRIMARY KEY,
+  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+  subject_id UUID NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+  semester INT NOT NULL DEFAULT 1,
+  internal_marks NUMERIC(5,2) NOT NULL DEFAULT 0,
+  assignment_marks NUMERIC(5,2) NOT NULL DEFAULT 0,
+  midterm_marks NUMERIC(5,2) NOT NULL DEFAULT 0,
+  external_marks NUMERIC(5,2) NOT NULL DEFAULT 0,
+  total_marks NUMERIC(5,2) NOT NULL DEFAULT 0,
+  grade TEXT NOT NULL DEFAULT 'F',
+  is_backlog BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_marks_student_id ON public.marks(student_id);
+CREATE INDEX IF NOT EXISTS idx_marks_subject_id ON public.marks(subject_id);
+
+ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.marks ENABLE ROW LEVEL SECURITY;
+
+-- 16. Attendance Logs Table
+CREATE TABLE IF NOT EXISTS public.attendance_logs (
+  id TEXT PRIMARY KEY,
+  course_code TEXT NOT NULL,
+  student_id UUID REFERENCES public.students(id) ON DELETE SET NULL,
+  student_name TEXT NOT NULL,
+  date DATE NOT NULL DEFAULT CURRENT_DATE,
+  status TEXT NOT NULL CHECK (status IN ('PRESENT', 'ABSENT', 'LATE', 'EXCUSED')),
+  department TEXT NOT NULL DEFAULT 'Computer Science',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_logs_date ON public.attendance_logs(date DESC);
+CREATE INDEX IF NOT EXISTS idx_attendance_logs_student_id ON public.attendance_logs(student_id);
+
+ALTER TABLE public.attendance_logs ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "Public read and write for attendance_logs" ON public.attendance_logs FOR ALL USING (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+

@@ -20,11 +20,15 @@ export const authenticateToken = (req, res, next) => {
 };
 
 export const authorizeRoles = (...roles) => {
+  const normalizedAllowedRoles = roles.map(r => String(r).toUpperCase().trim());
+
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ success: false, message: 'User unauthenticated' });
     }
-    if (!roles.includes(req.user.role)) {
+
+    const userRole = String(req.user.role || '').toUpperCase().trim();
+    if (!normalizedAllowedRoles.includes(userRole)) {
       return res.status(403).json({
         success: false,
         message: `Forbidden: Role '${req.user.role}' lacks authorization for this endpoint.`

@@ -146,27 +146,35 @@ export async function handleChatStream(req, res) {
 
     // 2. Persist user message to Supabase
     if (supabase) {
-      await supabase.from('chat_messages').insert({
-        id: crypto.randomUUID(),
-        session_id: currentSessionId,
-        role: 'user',
-        content: message.trim(),
-        created_at: new Date().toISOString()
-      }).catch(err => console.warn('[Chat Stream] Message insert warning:', err.message));
+      try {
+        await supabase.from('chat_messages').insert({
+          id: crypto.randomUUID(),
+          session_id: currentSessionId,
+          role: 'user',
+          content: message.trim(),
+          created_at: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn('[Chat Stream] Message insert warning:', err.message);
+      }
     }
 
     // 3. Retrieve conversation history for context (last 8 messages)
     let historyMessages = [];
     if (supabase) {
-      const { data: history } = await supabase
-        .from('chat_messages')
-        .select('role, content')
-        .eq('session_id', currentSessionId)
-        .order('created_at', { ascending: true })
-        .limit(10);
+      try {
+        const { data: history } = await supabase
+          .from('chat_messages')
+          .select('role, content')
+          .eq('session_id', currentSessionId)
+          .order('created_at', { ascending: true })
+          .limit(10);
 
-      if (history && history.length > 0) {
-        historyMessages = history.map(m => ({ role: m.role, content: m.content }));
+        if (history && history.length > 0) {
+          historyMessages = history.map(m => ({ role: m.role, content: m.content }));
+        }
+      } catch (hErr) {
+        console.warn('[Chat Stream] History fetch warning:', hErr.message);
       }
     }
 
@@ -205,19 +213,22 @@ export async function handleChatStream(req, res) {
 
     // 6. Persist completed assistant answer
     if (fullAssistantResponse && supabase) {
-      await supabase.from('chat_messages').insert({
-        id: crypto.randomUUID(),
-        session_id: currentSessionId,
-        role: 'assistant',
-        content: fullAssistantResponse,
-        created_at: new Date().toISOString()
-      }).catch(err => console.warn('[Chat Stream] Assistant message insert warning:', err.message));
+      try {
+        await supabase.from('chat_messages').insert({
+          id: crypto.randomUUID(),
+          session_id: currentSessionId,
+          role: 'assistant',
+          content: fullAssistantResponse,
+          created_at: new Date().toISOString()
+        });
 
-      await supabase
-        .from('chat_sessions')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', currentSessionId)
-        .catch(() => {});
+        await supabase
+          .from('chat_sessions')
+          .update({ updated_at: new Date().toISOString() })
+          .eq('id', currentSessionId);
+      } catch (pErr) {
+        console.warn('[Chat Stream] Assistant message persistence warning:', pErr.message);
+      }
     }
 
     sendEvent({ type: 'done', fullResponse: fullAssistantResponse });
