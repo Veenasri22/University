@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { Sparkles, Shield, Lock, Mail, ArrowRight } from 'lucide-react';
+import { Sparkles, Lock, Mail, ArrowRight } from 'lucide-react';
 
 export const Login = () => {
-  const [email, setEmail] = useState('admin@university.edu');
-  const [password, setPassword] = useState('Admin@12345');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -21,21 +21,6 @@ export const Login = () => {
       navigate('/dashboard');
     } catch (err) {
       setError(err.message || 'Authentication failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDemoRole = async (demoEmail) => {
-    setEmail(demoEmail);
-    setPassword('Admin@12345');
-    setError('');
-    setLoading(true);
-    try {
-      await login(demoEmail, 'Admin@12345');
-      navigate('/dashboard');
-    } catch (err) {
-      setError('Fast login failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -108,39 +93,6 @@ export const Login = () => {
           </button>
         </form>
 
-        {/* Demo Fast Login Buttons */}
-        <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
-          <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 text-center">
-            Instant Demo Profiles
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => handleDemoRole('admin@university.edu')}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/80 hover:bg-blue-50 dark:hover:bg-blue-600/20 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-300 text-[11px] font-semibold border border-slate-200 dark:border-slate-700 text-left transition-colors truncate"
-            >
-              👑 Admin Chancellor
-            </button>
-            <button
-              onClick={() => handleDemoRole('hod.cse@university.edu')}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/80 hover:bg-blue-50 dark:hover:bg-blue-600/20 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-300 text-[11px] font-semibold border border-slate-200 dark:border-slate-700 text-left transition-colors truncate"
-            >
-              🏛️ HOD Dr. Harrison
-            </button>
-            <button
-              onClick={() => handleDemoRole('prof.chen@university.edu')}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/80 hover:bg-blue-50 dark:hover:bg-blue-600/20 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-300 text-[11px] font-semibold border border-slate-200 dark:border-slate-700 text-left transition-colors truncate"
-            >
-              🎓 Prof. Marcus Chen
-            </button>
-            <button
-              onClick={() => handleDemoRole('alex.rivera@student.university.edu')}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/80 hover:bg-blue-50 dark:hover:bg-blue-600/20 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-300 text-[11px] font-semibold border border-slate-200 dark:border-slate-700 text-left transition-colors truncate"
-            >
-              📚 Student Alex Rivera
-            </button>
-          </div>
-        </div>
-
         <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
           Need a new profile?{' '}
           <Link to="/register" className="text-blue-600 dark:text-blue-400 font-bold hover:underline">
@@ -151,3 +103,4 @@ export const Login = () => {
     </div>
   );
 };
+
