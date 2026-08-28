@@ -10,6 +10,7 @@ export const AuthProvider = ({ children }) => {
   });
   const [loading, setLoading] = useState(true);
 
+
   useEffect(() => {
     const verifyUser = async () => {
       const token = localStorage.getItem('uni_auth_token');
@@ -62,3 +63,4 @@ export const AuthProvider = ({ children }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
+
