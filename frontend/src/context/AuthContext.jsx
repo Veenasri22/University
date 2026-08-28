@@ -41,11 +41,6 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (formData) => {
     const res = await api.post('/auth/register', formData);
-    if (res.token) {
-      localStorage.setItem('uni_auth_token', res.token);
-      localStorage.setItem('uni_user', JSON.stringify(res.user));
-      setUser(res.user);
-    }
     return res;
   };
 

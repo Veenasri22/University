@@ -23,7 +23,12 @@ export const Register = () => {
     setLoading(true);
     try {
       await register(formData);
-      navigate('/dashboard');
+      navigate('/login', {
+        state: {
+          registeredEmail: formData.email,
+          message: 'Account created successfully! Please sign in with your credentials.'
+        }
+      });
     } catch (err) {
       setError(err.message || 'Registration failed');
     } finally {
